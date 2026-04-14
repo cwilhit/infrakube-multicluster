@@ -1,12 +1,12 @@
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: infra3
+  name: infrakube
 subjects:
 - kind: ServiceAccount
-  name: infra3
-  namespace: infra3-system
+  name: infrakube
+  namespace: infrakube-system
 roleRef:
   kind: ClusterRole
-  name: infra3
+  name: infrakube
   apiGroup: rbac.authorization.k8s.io

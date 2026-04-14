@@ -1,8 +1,8 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: infra3
-  namespace: infra3-system
+  name: infrakube
+  namespace: infrakube-system
 spec:
   replicas: 1
   strategy:
@@ -12,24 +12,24 @@ spec:
       maxUnavailable: 25%
   selector:
     matchLabels:
-      app: infra3
+      app: infrakube
       component: controller
   template:
     metadata:
       labels:
-        app: infra3
+        app: infrakube
         component: controller
     spec:
-      serviceAccountName: infra3
+      serviceAccountName: infrakube
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
       containers:
-      - name: infra3
+      - name: infrakube
         image: "ghcr.io/galleybytes/infrakube:latest"
         imagePullPolicy: Always
         command:
-        - infra3
+        - infrakube
         args:
         - --zap-log-level=debug
         - --zap-encoder=console
@@ -46,7 +46,7 @@ spec:
               apiVersion: v1
               fieldPath: metadata.namespace
         - name: OPERATOR_NAME
-          value: infra3
+          value: infrakube
         resources:
           limits:
             cpu: 50m

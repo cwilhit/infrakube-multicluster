@@ -4,14 +4,16 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.17.3
-  name: tfs.infra3.galleybytes.com
+  name: terraforms.infrakube.galleybytes.com
 spec:
-  group: infra3.galleybytes.com
+  group: infrakube.galleybytes.com
   names:
-    kind: Tf
-    listKind: TfList
-    plural: tfs
-    singular: tf
+    kind: Terraform
+    listKind: TerraformList
+    plural: terraforms
+    shortNames:
+    - tf
+    singular: terraform
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -21,7 +23,7 @@ spec:
     name: v1
     schema:
       openAPIV3Schema:
-        description: Tf is the Schema for the tfs API
+        description: Terraform is the Schema for the terraforms API
         properties:
           apiVersion:
             description: |-
@@ -41,7 +43,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: TfSpec defines the desired state of tf
+            description: TerraformSpec defines the desired state of Terraform
             properties:
               backend:
                 description: |-
@@ -102,8 +104,8 @@ spec:
                             is the most secure way to use IRSA.
 
                             However, for a reusable policy consider "StringLike" with a few wildcards to make
-                            the irsa role usable by pods created by infra3. The example below is
-                            pretty liberal, but will work for any pod created by the infra3.
+                            the irsa role usable by pods created by infrakube. The example below is
+                            pretty liberal, but will work for any pod created by infrakube.
 
                             ```json
                               {
@@ -208,8 +210,8 @@ spec:
                     required:
                     - image
                     type: object
-                  tf:
-                    description: Tf task type container image definition
+                  terraform:
+                    description: Terraform task type container image definition
                     properties:
                       image:
                         description: The container image from the registry; tags must
@@ -235,7 +237,7 @@ spec:
               keepLatestPodsOnly:
                 description: |-
                   KeepLatestPodsOnly when true will keep only the pods that match the
-                  current generation of the tf k8s-resource. This overrides the
+                  current generation of the Terraform k8s-resource. This overrides the
                   behavior of `keepCompletedPods`.
                 type: boolean
               outputsSecret:
@@ -293,7 +295,7 @@ spec:
                     task:
                       description: |-
                         Task is the second part of a two-part selector of when the plugin gets run in the workflow. This
-                        should correspond to one of the infra3 task names.
+                        should correspond to one of the infrakube task names.
                       type: string
                     when:
                       description: |-
@@ -349,15 +351,15 @@ spec:
                   RequireApproval will place a hold after completing a plan that prevents the workflow from continuing.
                   However, the implementation of the hold takes place in the tf.sh script.
 
-                  (See https://github.com/GalleyBytes/infra3-tasks/blob/master/tf.sh)
+                  (See https://github.com/GalleyBytes/infrakube-tasks/blob/master/tf.sh)
 
                   Depending on the script that executes during the workflow, this field may be ignored if not implemented
                   by the user properly. To approve a workflow using the official galleybytes implementation, a file needs to be placed on the
                   workflow's persistent-volume:
 
-                  - <code>$I3_GENERATION_PATH/\\_approved\\_\\<uuid-of-plan-pod></code> - to approve the workflow
+                  - <code>$INFRAKUBE_GENERATION_PATH/\\_approved\\_\\<uuid-of-plan-pod></code> - to approve the workflow
 
-                  - <code>$I3_GENERATION_PATH/\\_canceled\\_\\<uuid-of-plan-pod></code> - to deny and cancel the workflow
+                  - <code>$INFRAKUBE_GENERATION_PATH/\\_canceled\\_\\<uuid-of-plan-pod></code> - to deny and cancel the workflow
 
                   Deleting the plan that is holding will spawn a new plan and a new approval will be required.
                 type: boolean
@@ -519,7 +521,7 @@ spec:
                 type: object
               storageClassName:
                 description: |-
-                  StorageClassName is the name of the volume that infra3 will use to store
+                  StorageClassName is the name of the volume that infrakube will use to store
                   data. An empty value means that this volume does not belong to any StorageClassName and will
                   use the clusters default StorageClassName
                 type: string
@@ -864,7 +866,7 @@ spec:
                           type: object
                         inline:
                           description: Inline is used to write the entire task execution
-                            script in the infra3 resource.
+                            script in the infrakube resource.
                           type: string
                         source:
                           description: Source is an http source that the task container
@@ -2737,8 +2739,9 @@ spec:
                   - for
                   type: object
                 type: array
-              tfModule:
-                description: TfModule is used to configure the source of the tf module.
+              terraformModule:
+                description: TerraformModule is used to configure the source of the
+                  terraform module.
                 properties:
                   configMapSeclector:
                     description: Typoed form of configMapSelector
@@ -2754,9 +2757,9 @@ spec:
                     description: |-
                       ConfigMapSelector is an option that points to an existing configmap on the executing cluster. The
                       configmap is expected to contains has the tf module (ie keys ending with .tf).
-                      The configmap would need to live in the same namespace as the infra3 resource.
+                      The configmap would need to live in the same namespace as the infrakube resource.
 
-                      The configmap is mounted as a volume and put into the I3_MAIN_MODULE path by the setup task.
+                      The configmap is mounted as a volume and put into the INFRAKUBE_MAIN_MODULE path by the setup task.
 
                       If a key is defined, the value is used as the module else the entirety of the data objects will be
                       loaded as files.
@@ -2770,7 +2773,7 @@ spec:
                     type: object
                   inline:
                     description: Inline used to define an entire tf module inline
-                      and then mounted in the I3_MAIN_MODULE path.
+                      and then mounted in the INFRAKUBE_MAIN_MODULE path.
                     type: string
                   source:
                     description: |-
@@ -2784,11 +2787,11 @@ spec:
                       Refer to https://www.terraform.io/language/modules/sources#module-sources for more details
                     type: string
                 type: object
-              tfVersion:
+              terraformVersion:
                 description: |-
-                  TfVersion is the version of tf which is used to run the module. The tf version is
-                  used as the tag of the tf image  regardless if images.tf.image is defined with a tag. In
-                  that case, the tag is stripped and replace with this value.
+                  TerraformVersion is the version of terraform which is used to run the module. The terraform version is
+                  used as the tag of the terraform image regardless if images.terraform.image is defined with a tag. In
+                  that case, the tag is stripped and replaced with this value.
                 type: string
               writeOutputsToStatus:
                 description: |-
@@ -2797,11 +2800,11 @@ spec:
                 type: boolean
             required:
             - backend
-            - tfModule
-            - tfVersion
+            - terraformModule
+            - terraformVersion
             type: object
           status:
-            description: TfStatus defines the observed state of tf
+            description: TerraformStatus defines the observed state of Terraform
             properties:
               lastCompletedGeneration:
                 description: |-

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/MakeNowJust/heredoc"
-	tfv1beta1 "github.com/galleybytes/infrakube/pkg/apis/infra3/v1"
+	tfv1beta1 "github.com/galleybytes/infrakube/pkg/apis/infrakube/v1"
 	"github.com/galleybytes/infrakube/pkg/utils"
 	"github.com/go-logr/logr"
 	getter "github.com/hashicorp/go-getter"
@@ -48,7 +48,7 @@ var defaultInlineSetupTaskExecutionFile string
 //go:embed scripts/noop.sh
 var defaultInlineNoOpExecutionFile string
 
-// ReconcileTf reconciles a Tf object
+// ReconcileTf reconciles a Terraform object
 type ReconcileTf struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
@@ -81,18 +81,18 @@ type ReconcileTf struct {
 	// When requireApproval is true, the require-approval plugin is injected into the plan pod
 	// when generating the pod manifest. The require-approval image is not modifiable via the Tf
 	// Resource in order to ensure the highest compatibility with the other TFO projects (like
-	// infra3-api and infra3-dashboard).
+	// infrakube-api and infrakube-dashboard).
 	RequireApprovalImage string
 }
 
 // createEnvFromSources adds any of the global environment vars defined at the controller scope
 // and generates a configmap or secret that will be loaded into the resource Task pods.
 //
-// TODO Each time a new generation is created of the infra3 resource, this "global" env from vars should
+// TODO Each time a new generation is created of the infrakube resource, this "global" env from vars should
 // generate a new configap and secret. The reason for this is to prevent a generation from producing a
 // different plan when is was the controller that changed options. A new generation should be forced
 // if the plan needs to change.
-func (r ReconcileTf) createEnvFromSources(ctx context.Context, tf *tfv1beta1.Tf) error {
+func (r ReconcileTf) createEnvFromSources(ctx context.Context, tf *tfv1beta1.Terraform) error {
 
 	resourceName := tf.Name
 	resourceNamespace := tf.Namespace
@@ -148,9 +148,9 @@ func (r ReconcileTf) createEnvFromSources(ctx context.Context, tf *tfv1beta1.Tf)
 // configmap and secrets for the envs have been created or updated when initializing the workflow.
 //
 // This function will return the envFrom of the resources that should exist but does not validate that
-// they do exist. If the configmap or secret is missing, force the generation of the infra3 resource to update
+// they do exist. If the configmap or secret is missing, force the generation of the infrakube resource to update
 // and the controller will recreate the missing resources.
-func (r ReconcileTf) listEnvFromSources(tf *tfv1beta1.Tf) []corev1.EnvFromSource {
+func (r ReconcileTf) listEnvFromSources(tf *tfv1beta1.Terraform) []corev1.EnvFromSource {
 	envFrom := []corev1.EnvFromSource{}
 	resourceName := tf.Name
 	name := fmt.Sprintf("%s-%s", resourceName, r.GlobalEnvSuffix)
@@ -187,7 +187,7 @@ func (r *ReconcileTf) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	err := ctrl.NewControllerManagedBy(mgr).
-		For(&tfv1beta1.Tf{}).
+		For(&tfv1beta1.Terraform{}).
 		Owns(&corev1.Pod{}).
 		WithOptions(controllerOptions).
 		Complete(r)
@@ -336,14 +336,14 @@ type TaskOptions struct {
 	sidecarPlugins []corev1.Pod
 }
 
-func newTaskOptions(tf *tfv1beta1.Tf, task tfv1beta1.TaskName, generation int64, globalEnvFrom []corev1.EnvFromSource, affinity *corev1.Affinity, nodeSelector map[string]string, tolerations []corev1.Toleration, requireApprovalImage string) TaskOptions {
+func newTaskOptions(tf *tfv1beta1.Terraform, task tfv1beta1.TaskName, generation int64, globalEnvFrom []corev1.EnvFromSource, affinity *corev1.Affinity, nodeSelector map[string]string, tolerations []corev1.Toleration, requireApprovalImage string) TaskOptions {
 	// TODO Read the tfstate and decide IF_NEW_RESOURCE based on that
 	// applyAction := false
 	resourceName := tf.Name
 	resourceUUID := string(tf.UID)
 	prefixedName := tf.Status.PodNamePrefix
 	versionedName := prefixedName + "-v" + fmt.Sprint(tf.Generation)
-	tfVersion := tf.Spec.TfVersion
+	tfVersion := tf.Spec.TerraformVersion
 	if tfVersion == "" {
 		tfVersion = "latest"
 	}
@@ -407,21 +407,16 @@ func newTaskOptions(tf *tfv1beta1.Tf, task tfv1beta1.TaskName, generation int64,
 		images = &tfv1beta1.Images{}
 	}
 
-	if images.Tf == nil {
-		images.Tf = &tfv1beta1.ImageConfig{
+	defaultImage := fmt.Sprintf("%s:%s", tfv1beta1.TaskImageRepoDefault, tfv1beta1.TaskImageTagDefault)
+
+	if images.Terraform == nil {
+		images.Terraform = &tfv1beta1.ImageConfig{
 			ImagePullPolicy: corev1.PullIfNotPresent,
 		}
 	}
 
-	if images.Tf.Image == "" {
-		images.Tf.Image = fmt.Sprintf("%s:%s", tfv1beta1.TfTaskImageRepoDefault, tfVersion)
-	} else {
-		tfImage := images.Tf.Image
-		splitImage := strings.Split(images.Tf.Image, ":")
-		if length := len(splitImage); length > 1 {
-			tfImage = strings.Join(splitImage[:length-1], ":")
-		}
-		images.Tf.Image = fmt.Sprintf("%s:%s", tfImage, tfVersion)
+	if images.Terraform.Image == "" {
+		images.Terraform.Image = defaultImage
 	}
 
 	if images.Setup == nil {
@@ -431,7 +426,7 @@ func newTaskOptions(tf *tfv1beta1.Tf, task tfv1beta1.TaskName, generation int64,
 	}
 
 	if images.Setup.Image == "" {
-		images.Setup.Image = fmt.Sprintf("%s:%s", tfv1beta1.SetupTaskImageRepoDefault, tfv1beta1.SetupTaskImageTagDefault)
+		images.Setup.Image = defaultImage
 	}
 
 	if images.Script == nil {
@@ -441,15 +436,15 @@ func newTaskOptions(tf *tfv1beta1.Tf, task tfv1beta1.TaskName, generation int64,
 	}
 
 	if images.Script.Image == "" {
-		images.Script.Image = fmt.Sprintf("%s:%s", tfv1beta1.ScriptTaskImageRepoDefault, tfv1beta1.ScriptTaskImageTagDefault)
+		images.Script.Image = defaultImage
 	}
 
 	if inlineTaskExecutionFile == "" && urlSource == "" && (configMapSourceKey == "" || configMapSourceName == "") {
 		useDefaultInlineTaskExecutionFile = true
 	}
 	if tfv1beta1.ListContainsTask(tfTaskList(), task) {
-		image = images.Tf.Image
-		imagePullPolicy = images.Tf.ImagePullPolicy
+		image = images.Terraform.Image
+		imagePullPolicy = images.Terraform.ImagePullPolicy
 		if useDefaultInlineTaskExecutionFile {
 			inlineTaskExecutionFile = "default-tf.sh"
 		}
@@ -478,7 +473,7 @@ func newTaskOptions(tf *tfv1beta1.Tf, task tfv1beta1.TaskName, generation int64,
 	credentials := tf.Spec.Credentials
 
 	// Outputs will be saved as a secret that will have the same lifecycle
-	// as the Tf CustomResource by adding the ownership metadata
+	// as the Terraform CustomResource by adding the ownership metadata
 	outputsSecretName := versionedName + "-outputs"
 	saveOutputs := false
 	stripGenerationLabelOnOutputsSecret := false
@@ -497,20 +492,20 @@ func newTaskOptions(tf *tfv1beta1.Tf, task tfv1beta1.TaskName, generation int64,
 	}
 
 	resourceLabels := map[string]string{
-		"tfs.infra3.galleybytes.com/generation":   fmt.Sprintf("%d", generation),
-		"tfs.infra3.galleybytes.com/resourceName": utils.AutoHashLabeler(resourceName),
-		"tfs.infra3.galleybytes.com/podPrefix":    prefixedName,
-		"tfs.infra3.galleybytes.com/tfVersion":    tfVersion,
-		"app.kubernetes.io/name":                  "infra3",
-		"app.kubernetes.io/component":             "i3-runner",
-		"app.kubernetes.io/created-by":            "controller",
+		"terraforms.infrakube.galleybytes.com/generation":   fmt.Sprintf("%d", generation),
+		"terraforms.infrakube.galleybytes.com/resourceName": utils.AutoHashLabeler(resourceName),
+		"terraforms.infrakube.galleybytes.com/podPrefix":    prefixedName,
+		"terraforms.infrakube.galleybytes.com/tfVersion":    tfVersion,
+		"app.kubernetes.io/name":                            "infrakube",
+		"app.kubernetes.io/component":                       "infrakube-runner",
+		"app.kubernetes.io/created-by":                      "controller",
 	}
 
 	requireApproval := tf.Spec.RequireApproval
 
 	if task.ID() == -2 {
 		// This is not one of the main tasks so it's probably an plugin
-		resourceLabels["tfs.infra3.galleybytes.com/isPlugin"] = "true"
+		resourceLabels["terraforms.infrakube.galleybytes.com/isPlugin"] = "true"
 	}
 
 	return TaskOptions{
@@ -556,10 +551,10 @@ func newTaskOptions(tf *tfv1beta1.Tf, task tfv1beta1.TaskName, generation int64,
 	}
 }
 
-const tfFinalizer = "finalizer.infra3.galleybytes.com"
+const tfFinalizer = "finalizer.infrakube.galleybytes.com"
 
-// Reconcile reads that state of the cluster for a Tf object and makes changes based on the state read
-// and what is in the Tf.Spec
+// Reconcile reads that state of the cluster for a Terraform object and makes changes based on the state read
+// and what is in the Terraform.Spec
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
@@ -588,11 +583,11 @@ func (r *ReconcileTf) Reconcile(ctx context.Context, request reconcile.Request) 
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
 			// reqLogger.Info(fmt.Sprintf("Not found, instance is defined as: %+v", instance))
-			reqLogger.V(1).Info("Tf resource not found. Ignoring since object must be deleted")
+			reqLogger.V(1).Info("Terraform resource not found. Ignoring since object must be deleted")
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
-		reqLogger.Error(err, "Failed to get Tf")
+		reqLogger.Error(err, "Failed to get Terraform")
 		return reconcile.Result{}, err
 	}
 
@@ -790,7 +785,7 @@ func (r *ReconcileTf) Reconcile(ctx context.Context, request reconcile.Request) 
 		"metadata.generateName": fmt.Sprintf("%s-%s-", tf.Status.PodNamePrefix+"-v"+fmt.Sprint(generation), podType),
 	}
 	labelSelector := map[string]string{
-		"tfs.infra3.galleybytes.com/generation": fmt.Sprintf("%d", generation),
+		"terraforms.infrakube.galleybytes.com/generation": fmt.Sprintf("%d", generation),
 	}
 	matchingFields := client.MatchingFields(f)
 	matchingLabels := client.MatchingLabels(labelSelector)
@@ -916,7 +911,7 @@ func (r *ReconcileTf) Reconcile(ctx context.Context, request reconcile.Request) 
 			return reconcile.Result{Requeue: true}, nil
 		}
 		// When the pod is created, don't requeue. The pod's status changes
-		// will trigger infra3 to reconcile.
+		// will trigger infrakube to reconcile.
 		return reconcile.Result{}, nil
 	}
 
@@ -995,8 +990,8 @@ func (r *ReconcileTf) Reconcile(ctx context.Context, request reconcile.Request) 
 }
 
 // getTfResource fetches the tf resource with a retry
-func (r ReconcileTf) getTfResource(ctx context.Context, namespacedName types.NamespacedName, maxRetry int, reqLogger logr.Logger) (*tfv1beta1.Tf, error) {
-	tf := &tfv1beta1.Tf{}
+func (r ReconcileTf) getTfResource(ctx context.Context, namespacedName types.NamespacedName, maxRetry int, reqLogger logr.Logger) (*tfv1beta1.Terraform, error) {
+	tf := &tfv1beta1.Terraform{}
 	for retryCount := 1; retryCount <= maxRetry; retryCount++ {
 		err := r.Client.Get(ctx, namespacedName, tf)
 		if err != nil {
@@ -1014,7 +1009,7 @@ func (r ReconcileTf) getTfResource(ctx context.Context, namespacedName types.Nam
 	return tf, nil
 }
 
-func newStage(tf *tfv1beta1.Tf, taskType tfv1beta1.TaskName, reason string, interruptible tfv1beta1.Interruptible, stageState tfv1beta1.StageState) *tfv1beta1.Stage {
+func newStage(tf *tfv1beta1.Terraform, taskType tfv1beta1.TaskName, reason string, interruptible tfv1beta1.Interruptible, stageState tfv1beta1.StageState) *tfv1beta1.Stage {
 	if reason == "GENERATION_CHANGE" {
 		tf.Status.PluginsStarted = []tfv1beta1.TaskName{}
 		tf.Status.Phase = tfv1beta1.PhaseInitializing
@@ -1076,7 +1071,7 @@ func getConfiguredTasks(taskOptions *[]tfv1beta1.TaskOption) []tfv1beta1.TaskNam
 // When a stage has already triggered a pod, the only way for the pod to transition to the next stage is for
 // the pod to complete successfully. Any other pod phase will keep the pod in the current stage, or in the
 // case of the apply task, the workflow will be restarted.
-func (r ReconcileTf) checkSetNewStage(ctx context.Context, tf *tfv1beta1.Tf, isRetry bool) *tfv1beta1.Stage {
+func (r ReconcileTf) checkSetNewStage(ctx context.Context, tf *tfv1beta1.Terraform, isRetry bool) *tfv1beta1.Stage {
 	var isNewStage bool
 	var podType tfv1beta1.TaskName
 	var reason string
@@ -1189,8 +1184,8 @@ func (r ReconcileTf) checkSetNewStage(ctx context.Context, tf *tfv1beta1.Tf, isR
 func (r ReconcileTf) removeOldPlan(namespace, name, reason string, generation int64) error {
 
 	labelSelectors := []string{
-		fmt.Sprintf("tfs.infra3.galleybytes.com/generation==%d", generation),
-		fmt.Sprintf("tfs.infra3.galleybytes.com/resourceName=%s", utils.AutoHashLabeler(name)),
+		fmt.Sprintf("terraforms.infrakube.galleybytes.com/generation==%d", generation),
+		fmt.Sprintf("terraforms.infrakube.galleybytes.com/resourceName=%s", utils.AutoHashLabeler(name)),
 		"app.kubernetes.io/instance",
 	}
 	if reason == "RESTARTED_WORKFLOW" {
@@ -1300,8 +1295,8 @@ func nextTask(currentTask tfv1beta1.TaskName, configuredTasks []tfv1beta1.TaskNa
 	return next
 }
 
-func (r ReconcileTf) backgroundReapOldGenerationPods(tf *tfv1beta1.Tf, attempt int) {
-	logger := r.Log.WithName("Reaper").WithValues("Tf", fmt.Sprintf("%s/%s", tf.Namespace, tf.Name))
+func (r ReconcileTf) backgroundReapOldGenerationPods(tf *tfv1beta1.Terraform, attempt int) {
+	logger := r.Log.WithName("Reaper").WithValues("Terraform", fmt.Sprintf("%s/%s", tf.Namespace, tf.Name))
 	if attempt > 20 {
 		// TODO explain what and way resources cannot be reaped
 		logger.Info("Could not reap resources: Max attempts to reap old-generation resources")
@@ -1315,20 +1310,20 @@ func (r ReconcileTf) backgroundReapOldGenerationPods(tf *tfv1beta1.Tf, attempt i
 	tf, err := r.getTfResource(ctx, namespacedName, 3, logger)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			logger.V(1).Info("Tf resource not found. Ignoring since object must be deleted")
+			logger.V(1).Info("Terraform resource not found. Ignoring since object must be deleted")
 			return
 		}
 		// Error reading the object - requeue the request.
-		logger.Error(err, "Failed to get Tf")
+		logger.Error(err, "Failed to get Terraform")
 		return
 	}
 
 	// The labels required are read as:
-	// 1. The tfs.infra3.galleybytes.com/generation key MUST exist
-	// 2. The tfs.infra3.galleybytes.com/generation value MUST match the current resource generation
-	// 3. The tfs.infra3.galleybytes.com/resourceName key MUST exist
-	// 4. The tfs.infra3.galleybytes.com/resourceName value MUST match the resource name
-	labelSelector, err := labels.Parse(fmt.Sprintf("tfs.infra3.galleybytes.com/generation,tfs.infra3.galleybytes.com/generation!=%d,tfs.infra3.galleybytes.com/resourceName,tfs.infra3.galleybytes.com/resourceName=%s", tf.Generation, utils.AutoHashLabeler(tf.Name)))
+	// 1. The terraforms.infrakube.galleybytes.com/generation key MUST exist
+	// 2. The terraforms.infrakube.galleybytes.com/generation value MUST match the current resource generation
+	// 3. The terraforms.infrakube.galleybytes.com/resourceName key MUST exist
+	// 4. The terraforms.infrakube.galleybytes.com/resourceName value MUST match the resource name
+	labelSelector, err := labels.Parse(fmt.Sprintf("terraforms.infrakube.galleybytes.com/generation,terraforms.infrakube.galleybytes.com/generation!=%d,terraforms.infrakube.galleybytes.com/resourceName,terraforms.infrakube.galleybytes.com/resourceName=%s", tf.Generation, utils.AutoHashLabeler(tf.Name)))
 	if err != nil {
 		logger.Error(err, "Could not parse labels")
 		return
@@ -1428,8 +1423,8 @@ func (r ReconcileTf) backgroundReapOldGenerationPods(tf *tfv1beta1.Tf, attempt i
 	}
 }
 
-func (r ReconcileTf) reapPlugins(tf *tfv1beta1.Tf, attempt int) {
-	logger := r.Log.WithName("ReaperPlugins").WithValues("Tf", fmt.Sprintf("%s/%s", tf.Namespace, tf.Name))
+func (r ReconcileTf) reapPlugins(tf *tfv1beta1.Terraform, attempt int) {
+	logger := r.Log.WithName("ReaperPlugins").WithValues("Terraform", fmt.Sprintf("%s/%s", tf.Namespace, tf.Name))
 	if attempt > 20 {
 		// TODO explain what and way resources cannot be reaped
 		logger.Info("Could not reap resources: Max attempts to reap old-generation resources")
@@ -1442,16 +1437,16 @@ func (r ReconcileTf) reapPlugins(tf *tfv1beta1.Tf, attempt int) {
 	tf, err := r.getTfResource(ctx, namespacedName, 3, logger)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			logger.V(1).Info("Tf resource not found. Ignoring since object must be deleted")
+			logger.V(1).Info("Terraform resource not found. Ignoring since object must be deleted")
 			return
 		}
 		// Error reading the object - requeue the request.
-		logger.Error(err, "Failed to get Tf")
+		logger.Error(err, "Failed to get Terraform")
 		return
 	}
 
 	// Delete old plugins regardless of pod phase
-	labelSelectorForPlugins, err := labels.Parse(fmt.Sprintf("tfs.infra3.galleybytes.com/isPlugin=true,tfs.infra3.galleybytes.com/generation,tfs.infra3.galleybytes.com/generation!=%d,tfs.infra3.galleybytes.com/resourceName,tfs.infra3.galleybytes.com/resourceName=%s", tf.Generation, utils.AutoHashLabeler(tf.Name)))
+	labelSelectorForPlugins, err := labels.Parse(fmt.Sprintf("terraforms.infrakube.galleybytes.com/isPlugin=true,terraforms.infrakube.galleybytes.com/generation,terraforms.infrakube.galleybytes.com/generation!=%d,terraforms.infrakube.galleybytes.com/resourceName,terraforms.infrakube.galleybytes.com/resourceName=%s", tf.Generation, utils.AutoHashLabeler(tf.Name)))
 	if err != nil {
 		logger.Error(err, "Could not parse labels")
 	}
@@ -1524,7 +1519,7 @@ func (r ReconcileTf) getNodeSelectorsFromCache() (*corev1.Affinity, map[string]s
 }
 
 // Define a set of TaskOptions specific for the plugin task
-func (r ReconcileTf) getPluginRunOpts(tf *tfv1beta1.Tf, pluginTaskName tfv1beta1.TaskName, pluginConfig tfv1beta1.Plugin, globalEnvFrom []corev1.EnvFromSource) TaskOptions {
+func (r ReconcileTf) getPluginRunOpts(tf *tfv1beta1.Terraform, pluginTaskName tfv1beta1.TaskName, pluginConfig tfv1beta1.Plugin, globalEnvFrom []corev1.EnvFromSource) TaskOptions {
 	affinity, nodeSelector, tolerations := r.getNodeSelectorsFromCache()
 	pluginRunOpts := newTaskOptions(tf, pluginTaskName, tf.Generation, globalEnvFrom, affinity, nodeSelector, tolerations, r.RequireApprovalImage)
 	pluginRunOpts.image = pluginConfig.Image
@@ -1532,14 +1527,14 @@ func (r ReconcileTf) getPluginRunOpts(tf *tfv1beta1.Tf, pluginTaskName tfv1beta1
 	return pluginRunOpts
 }
 
-func (r ReconcileTf) getPluginSidecarPod(ctx context.Context, logger logr.Logger, tf *tfv1beta1.Tf, pluginTaskName tfv1beta1.TaskName, pluginConfig tfv1beta1.Plugin, globalEnvFrom []corev1.EnvFromSource) (*corev1.Pod, error) {
+func (r ReconcileTf) getPluginSidecarPod(ctx context.Context, logger logr.Logger, tf *tfv1beta1.Terraform, pluginTaskName tfv1beta1.TaskName, pluginConfig tfv1beta1.Plugin, globalEnvFrom []corev1.EnvFromSource) (*corev1.Pod, error) {
 	return r.getPluginRunOpts(tf, pluginTaskName, pluginConfig, globalEnvFrom).generatePod()
 }
 
 // createPluginJob will attempt to create the plugin pod and mark it as added in the resource's status.
 // No logic is used to determine if the plugin was successful. If the createPod function errors, a log event
 // is recorded in the controller.
-func (r ReconcileTf) createPluginJob(ctx context.Context, logger logr.Logger, tf *tfv1beta1.Tf, pluginTaskName tfv1beta1.TaskName, pluginConfig tfv1beta1.Plugin, globalEnvFrom []corev1.EnvFromSource) (reconcile.Result, error) {
+func (r ReconcileTf) createPluginJob(ctx context.Context, logger logr.Logger, tf *tfv1beta1.Terraform, pluginTaskName tfv1beta1.TaskName, pluginConfig tfv1beta1.Plugin, globalEnvFrom []corev1.EnvFromSource) (reconcile.Result, error) {
 	pluginRunOpts := r.getPluginRunOpts(tf, pluginTaskName, pluginConfig, globalEnvFrom)
 
 	go func() {
@@ -1563,7 +1558,7 @@ func (r ReconcileTf) createPluginJob(ctx context.Context, logger logr.Logger, tf
 // the finalizer is added.
 //
 // The finalizer will be responsible for starting the destroy-workflow.
-func updateFinalizer(tf *tfv1beta1.Tf) bool {
+func updateFinalizer(tf *tfv1beta1.Terraform) bool {
 	finalizers := tf.GetFinalizers()
 
 	if tf.Status.Phase == tfv1beta1.PhaseDeleted {
@@ -1597,7 +1592,7 @@ type gitSecret struct {
 	shoudBeLocked bool
 }
 
-func (r ReconcileTf) getGitSecrets(tf *tfv1beta1.Tf) []gitSecret {
+func (r ReconcileTf) getGitSecrets(tf *tfv1beta1.Terraform) []gitSecret {
 	secrets := []gitSecret{}
 	for _, m := range tf.Spec.SCMAuthMethods {
 		if m.Git.HTTPS != nil {
@@ -1630,8 +1625,8 @@ func (r ReconcileTf) getGitSecrets(tf *tfv1beta1.Tf) []gitSecret {
 
 // updateSecretFinalizer sets and unsets finalizers on all secrets mentioned in spec.scmAuthMethods
 // to ensure tf workflow will work properly.
-func (r ReconcileTf) updateSecretFinalizer(ctx context.Context, tf *tfv1beta1.Tf) error {
-	finalizerKey := utils.TruncateResourceName(fmt.Sprintf("finalizer.infra3.galleybytes.com/%s", tf.Name), 53)
+func (r ReconcileTf) updateSecretFinalizer(ctx context.Context, tf *tfv1beta1.Terraform) error {
+	finalizerKey := utils.TruncateResourceName(fmt.Sprintf("finalizer.infrakube.galleybytes.com/%s", tf.Name), 53)
 
 	secrets := r.getGitSecrets(tf)
 	for _, m := range secrets {
@@ -1676,7 +1671,7 @@ func (r ReconcileTf) unlockGitSecretDeletion(ctx context.Context, name, namespac
 	return nil
 }
 
-func (r ReconcileTf) update(ctx context.Context, tf *tfv1beta1.Tf) error {
+func (r ReconcileTf) update(ctx context.Context, tf *tfv1beta1.Terraform) error {
 	err := r.Client.Update(ctx, tf)
 	if err != nil {
 		return fmt.Errorf("failed to update tf resource: %s", err)
@@ -1684,7 +1679,7 @@ func (r ReconcileTf) update(ctx context.Context, tf *tfv1beta1.Tf) error {
 	return nil
 }
 
-func (r ReconcileTf) updateStatus(ctx context.Context, tf *tfv1beta1.Tf) error {
+func (r ReconcileTf) updateStatus(ctx context.Context, tf *tfv1beta1.Terraform) error {
 	err := r.Client.Status().Update(ctx, tf)
 	if err != nil {
 		return fmt.Errorf("failed to update tf status: %s", err)
@@ -1692,7 +1687,7 @@ func (r ReconcileTf) updateStatus(ctx context.Context, tf *tfv1beta1.Tf) error {
 	return nil
 }
 
-func (r ReconcileTf) updateStatusWithRetry(ctx context.Context, tf *tfv1beta1.Tf, desiredStatus *tfv1beta1.TfStatus, logger logr.Logger) error {
+func (r ReconcileTf) updateStatusWithRetry(ctx context.Context, tf *tfv1beta1.Terraform, desiredStatus *tfv1beta1.TerraformStatus, logger logr.Logger) error {
 	resourceNamespacedName := types.NamespacedName{Namespace: tf.Namespace, Name: tf.Name}
 	var getResourceErr error
 	var updateErr error
@@ -1767,7 +1762,7 @@ func IsJobFinished(job *batchv1.Job) bool {
 	return job.Status.CompletionTime != nil || (job.Status.Active == 0 && BackoffLimit != nil && job.Status.Failed >= *BackoffLimit)
 }
 
-func formatJobSSHConfig(ctx context.Context, reqLogger logr.Logger, tf *tfv1beta1.Tf, k8sclient client.Client) (map[string][]byte, error) {
+func formatJobSSHConfig(ctx context.Context, reqLogger logr.Logger, tf *tfv1beta1.Terraform, k8sclient client.Client) (map[string][]byte, error) {
 	data := make(map[string]string)
 	dataAsByte := make(map[string][]byte)
 	if tf.Spec.SSHTunnel != nil {
@@ -1843,8 +1838,8 @@ func formatJobSSHConfig(ctx context.Context, reqLogger logr.Logger, tf *tfv1beta
 	return dataAsByte, nil
 }
 
-func (r *ReconcileTf) setupAndRun(ctx context.Context, tf *tfv1beta1.Tf, runOpts TaskOptions) error {
-	reqLogger := r.Log.WithValues("Tf", types.NamespacedName{Name: tf.Name, Namespace: tf.Namespace}.String())
+func (r *ReconcileTf) setupAndRun(ctx context.Context, tf *tfv1beta1.Terraform, runOpts TaskOptions) error {
+	reqLogger := r.Log.WithValues("Terraform", types.NamespacedName{Name: tf.Name, Namespace: tf.Namespace}.String())
 	var err error
 
 	reason := tf.Status.Stage.Reason
@@ -1863,25 +1858,25 @@ func (r *ReconcileTf) setupAndRun(ctx context.Context, tf *tfv1beta1.Tf, runOpts
 		}
 	}
 
-	if tf.Spec.TfModule.Inline != "" {
+	if tf.Spec.TerraformModule.Inline != "" {
 		// Add add inline to configmap and instruct the pod to fetch the
 		// configmap as the main module
-		runOpts.mainModulePluginData["inline-module.tf"] = tf.Spec.TfModule.Inline
-	} else if tf.Spec.TfModule.ConfigMapSeclector_x != nil {
-		b, err := json.Marshal(tf.Spec.TfModule.ConfigMapSeclector_x)
+		runOpts.mainModulePluginData["inline-module.tf"] = tf.Spec.TerraformModule.Inline
+	} else if tf.Spec.TerraformModule.ConfigMapSeclector_x != nil {
+		b, err := json.Marshal(tf.Spec.TerraformModule.ConfigMapSeclector_x)
 		if err != nil {
 			return err
 		}
-		runOpts.mainModulePluginData[".__I3__ConfigMapModule.json"] = string(b)
-	} else if tf.Spec.TfModule.ConfigMapSelector != nil {
+		runOpts.mainModulePluginData[".__INFRAKUBE__ConfigMapModule.json"] = string(b)
+	} else if tf.Spec.TerraformModule.ConfigMapSelector != nil {
 		// Instruct the setup pod to fetch the configmap as the main module
-		b, err := json.Marshal(tf.Spec.TfModule.ConfigMapSelector)
+		b, err := json.Marshal(tf.Spec.TerraformModule.ConfigMapSelector)
 		if err != nil {
 			return err
 		}
-		runOpts.mainModulePluginData[".__I3__ConfigMapModule.json"] = string(b)
-	} else if tf.Spec.TfModule.Source != "" {
-		runOpts.tfModuleParsed, err = getParsedAddress(tf.Spec.TfModule.Source, "", false, scmMap)
+		runOpts.mainModulePluginData[".__INFRAKUBE__ConfigMapModule.json"] = string(b)
+	} else if tf.Spec.TerraformModule.Source != "" {
+		runOpts.tfModuleParsed, err = getParsedAddress(tf.Spec.TerraformModule.Source, "", false, scmMap)
 		if err != nil {
 			return err
 		}
@@ -1976,7 +1971,7 @@ func (r *ReconcileTf) setupAndRun(ctx context.Context, tf *tfv1beta1.Tf, runOpts
 		}
 		resourceDownloads := string(b)
 
-		runOpts.mainModulePluginData[".__I3__ResourceDownloads.json"] = resourceDownloads
+		runOpts.mainModulePluginData[".__INFRAKUBE__ResourceDownloads.json"] = resourceDownloads
 
 		// Override the backend.tf by inserting a custom backend
 		runOpts.mainModulePluginData["backend_override.tf"] = tf.Spec.Backend
@@ -2003,7 +1998,7 @@ func (r ReconcileTf) checkPersistentVolumeClaimExists(ctx context.Context, looku
 	return resource, true, nil
 }
 
-func (r ReconcileTf) createPVC(ctx context.Context, tf *tfv1beta1.Tf, runOpts TaskOptions) error {
+func (r ReconcileTf) createPVC(ctx context.Context, tf *tfv1beta1.Terraform, runOpts TaskOptions) error {
 	kind := "PersistentVolumeClaim"
 	_, found, err := r.checkPersistentVolumeClaimExists(ctx, types.NamespacedName{
 		Name:      runOpts.prefixedName,
@@ -2060,7 +2055,7 @@ func (r ReconcileTf) deleteConfigMapIfExists(ctx context.Context, name, namespac
 	return nil
 }
 
-func (r ReconcileTf) createConfigMap(ctx context.Context, tf *tfv1beta1.Tf, runOpts TaskOptions) error {
+func (r ReconcileTf) createConfigMap(ctx context.Context, tf *tfv1beta1.Terraform, runOpts TaskOptions) error {
 	kind := "ConfigMap"
 
 	resource := runOpts.generateConfigMap()
@@ -2109,7 +2104,7 @@ func (r ReconcileTf) deleteSecretIfExists(ctx context.Context, name, namespace s
 	return nil
 }
 
-func (r ReconcileTf) createSecret(ctx context.Context, tf *tfv1beta1.Tf, name, namespace string, data map[string][]byte, recreate bool, labelsToOmit []string, runOpts TaskOptions) error {
+func (r ReconcileTf) createSecret(ctx context.Context, tf *tfv1beta1.Terraform, name, namespace string, data map[string][]byte, recreate bool, labelsToOmit []string, runOpts TaskOptions) error {
 	kind := "Secret"
 
 	// Must make a clean map of labels since the memory address is shared
@@ -2177,7 +2172,7 @@ func (r ReconcileTf) deleteServiceAccountIfExists(ctx context.Context, name, nam
 	return nil
 }
 
-func (r ReconcileTf) createServiceAccount(ctx context.Context, tf *tfv1beta1.Tf, runOpts TaskOptions) error {
+func (r ReconcileTf) createServiceAccount(ctx context.Context, tf *tfv1beta1.Terraform, runOpts TaskOptions) error {
 	kind := "ServiceAccount"
 
 	resource := runOpts.generateServiceAccount()
@@ -2225,7 +2220,7 @@ func (r ReconcileTf) deleteRoleIfExists(ctx context.Context, name, namespace str
 	return nil
 }
 
-func (r ReconcileTf) createRole(ctx context.Context, tf *tfv1beta1.Tf, runOpts TaskOptions) error {
+func (r ReconcileTf) createRole(ctx context.Context, tf *tfv1beta1.Terraform, runOpts TaskOptions) error {
 	kind := "Role"
 
 	resource := runOpts.generateRole()
@@ -2273,7 +2268,7 @@ func (r ReconcileTf) deleteRoleBindingIfExists(ctx context.Context, name, namesp
 	return nil
 }
 
-func (r ReconcileTf) createRoleBinding(ctx context.Context, tf *tfv1beta1.Tf, runOpts TaskOptions) error {
+func (r ReconcileTf) createRoleBinding(ctx context.Context, tf *tfv1beta1.Terraform, runOpts TaskOptions) error {
 	kind := "RoleBinding"
 
 	resource := runOpts.generateRoleBinding()
@@ -2292,7 +2287,7 @@ func (r ReconcileTf) createRoleBinding(ctx context.Context, tf *tfv1beta1.Tf, ru
 	return nil
 }
 
-func (r ReconcileTf) createPod(ctx context.Context, tf *tfv1beta1.Tf, runOpts TaskOptions) error {
+func (r ReconcileTf) createPod(ctx context.Context, tf *tfv1beta1.Terraform, runOpts TaskOptions) error {
 	kind := "Pod"
 
 	resource, err := runOpts.generatePod()
@@ -2316,7 +2311,7 @@ func int32p(i int32) *int32 {
 	return &i
 }
 
-func (r ReconcileTf) createJob(ctx context.Context, tf *tfv1beta1.Tf, runOpts TaskOptions) error {
+func (r ReconcileTf) createJob(ctx context.Context, tf *tfv1beta1.Terraform, runOpts TaskOptions) error {
 	kind := "Job"
 
 	resource := runOpts.generateJob()
@@ -2405,7 +2400,7 @@ func (r TaskOptions) generateRole() *rbacv1.Role {
 		},
 		{
 			Verbs:         []string{"get"},
-			APIGroups:     []string{"infra3.galleybytes.com"},
+			APIGroups:     []string{"infrakube.galleybytes.com"},
 			Resources:     []string{"tfs"},
 			ResourceNames: []string{r.resourceName},
 		},
@@ -2502,7 +2497,7 @@ func (r TaskOptions) generatePVC(size resource.Quantity, storageClassName *strin
 
 func (r TaskOptions) validateVolume() error {
 	prohibitedNames := map[string]string{
-		"infra3home":         "",
+		"infrakubehome":      "",
 		"config-map-source":  "",
 		"main-module-addons": "",
 		"gitaskpass":         "",
@@ -2544,7 +2539,7 @@ func (r TaskOptions) validateVolume() error {
 // Although most of the tasks use similar.... (TODO EDIT ME)
 func (r TaskOptions) generatePod() (*corev1.Pod, error) {
 
-	home := "/home/i3-runner"
+	home := "/home/infrakube-runner"
 	generateName := r.versionedName + "-" + r.task.String() + "-"
 	generationPath := fmt.Sprintf("%s/generations/%d", home, r.generation)
 
@@ -2564,87 +2559,87 @@ func (r TaskOptions) generatePod() (*corev1.Pod, error) {
 		{
 			/*
 
-				What is the significance of having an env about the I3_RUNNER?
+				What is the significance of having an env about the INFRAKUBE_RUNNER?
 
 				Only used to idenify the taskType for the log.out file. This
 				should simply be the taskType name.
 
 			*/
-			Name:  "I3_TASK",
+			Name:  "INFRAKUBE_TASK",
 			Value: r.task.String(),
 		},
 		{
-			Name:  "I3_TASK_EXEC_URL_SOURCE",
+			Name:  "INFRAKUBE_TASK_EXEC_URL_SOURCE",
 			Value: r.urlSource,
 		},
 		{
-			Name:  "I3_TASK_EXEC_CONFIGMAP_SOURCE_NAME",
+			Name:  "INFRAKUBE_TASK_EXEC_CONFIGMAP_SOURCE_NAME",
 			Value: r.configMapSourceName,
 		},
 		{
-			Name:  "I3_TASK_EXEC_CONFIGMAP_SOURCE_KEY",
+			Name:  "INFRAKUBE_TASK_EXEC_CONFIGMAP_SOURCE_KEY",
 			Value: r.configMapSourceKey,
 		},
 		{
-			Name:  "I3_TASK_EXEC_INLINE_SOURCE_FILE",
+			Name:  "INFRAKUBE_TASK_EXEC_INLINE_SOURCE_FILE",
 			Value: r.inlineTaskExecutionFile,
 		},
 		{
-			Name:  "I3_RESOURCE",
+			Name:  "INFRAKUBE_RESOURCE",
 			Value: r.resourceName,
 		},
 		{
-			Name:  "I3_RESOURCE_UUID",
+			Name:  "INFRAKUBE_RESOURCE_UUID",
 			Value: r.resourceUUID,
 		},
 		{
-			Name:  "I3_NAMESPACE",
+			Name:  "INFRAKUBE_NAMESPACE",
 			Value: r.namespace,
 		},
 		{
-			Name:  "I3_GENERATION",
+			Name:  "INFRAKUBE_GENERATION",
 			Value: fmt.Sprintf("%d", r.generation),
 		},
 		{
-			Name:  "I3_GENERATION_PATH",
+			Name:  "INFRAKUBE_GENERATION_PATH",
 			Value: generationPath,
 		},
 		{
-			Name:  "I3_MAIN_MODULE",
+			Name:  "INFRAKUBE_MAIN_MODULE",
 			Value: generationPath + "/main",
 		},
 		{
-			Name:  "I3_TF_VERSION",
+			Name:  "INFRAKUBE_TF_VERSION",
 			Value: r.tfVersion,
 		},
 		{
-			Name:  "I3_SAVE_OUTPUTS",
+			Name:  "INFRAKUBE_SAVE_OUTPUTS",
 			Value: strconv.FormatBool(r.saveOutputs),
 		},
 		{
-			Name:  "I3_OUTPUTS_SECRET_NAME",
+			Name:  "INFRAKUBE_OUTPUTS_SECRET_NAME",
 			Value: r.outputsSecretName,
 		},
 		{
-			Name:  "I3_OUTPUTS_TO_INCLUDE",
+			Name:  "INFRAKUBE_OUTPUTS_TO_INCLUDE",
 			Value: strings.Join(r.outputsToInclude, ","),
 		},
 		{
-			Name:  "I3_OUTPUTS_TO_OMIT",
+			Name:  "INFRAKUBE_OUTPUTS_TO_OMIT",
 			Value: strings.Join(r.outputsToOmit, ","),
 		},
 	}...)
 
 	if r.cleanupDisk {
 		envs = append(envs, corev1.EnvVar{
-			Name:  "I3_CLEANUP_DISK",
+			Name:  "INFRAKUBE_CLEANUP_DISK",
 			Value: "true",
 		})
 	}
 
 	volumes := []corev1.Volume{
 		{
-			Name: "infra3home",
+			Name: "infrakubehome",
 			VolumeSource: corev1.VolumeSource{
 				//
 				// TODO add an option to the tf to use host or pvc
@@ -2674,25 +2669,25 @@ func (r TaskOptions) generatePod() (*corev1.Pod, error) {
 	volumes = append(volumes, r.volumes...)
 	volumeMounts := []corev1.VolumeMount{
 		{
-			Name:      "infra3home",
+			Name:      "infrakubehome",
 			MountPath: home,
 			ReadOnly:  false,
 		},
 	}
 	volumeMounts = append(volumeMounts, r.volumeMounts...)
 	envs = append(envs, corev1.EnvVar{
-		Name:  "I3_ROOT_PATH",
+		Name:  "INFRAKUBE_ROOT_PATH",
 		Value: home,
 	})
 
 	if r.tfModuleParsed.Repo != "" {
 		envs = append(envs, []corev1.EnvVar{
 			{
-				Name:  "I3_MAIN_MODULE_REPO",
+				Name:  "INFRAKUBE_MAIN_MODULE_REPO",
 				Value: r.tfModuleParsed.Repo,
 			},
 			{
-				Name:  "I3_MAIN_MODULE_REPO_REF",
+				Name:  "INFRAKUBE_MAIN_MODULE_REPO_REF",
 				Value: r.tfModuleParsed.Hash,
 			},
 		}...)
@@ -2706,7 +2701,7 @@ func (r TaskOptions) generatePod() (*corev1.Pod, error) {
 			}
 			envs = append(envs, []corev1.EnvVar{
 				{
-					Name:  "I3_MAIN_MODULE_REPO_SUBDIR",
+					Name:  "INFRAKUBE_MAIN_MODULE_REPO_SUBDIR",
 					Value: value,
 				},
 			}...)
@@ -2715,7 +2710,7 @@ func (r TaskOptions) generatePod() (*corev1.Pod, error) {
 			//		of this if statement
 			envs = append(envs, []corev1.EnvVar{
 				{
-					Name:  "I3_MAIN_MODULE_REPO_SUBDIR",
+					Name:  "INFRAKUBE_MAIN_MODULE_REPO_SUBDIR",
 					Value: ".",
 				},
 			}...)
@@ -2742,7 +2737,7 @@ func (r TaskOptions) generatePod() (*corev1.Pod, error) {
 	}
 	envs = append(envs, []corev1.EnvVar{
 		{
-			Name:  "I3_TASK_EXEC_CONFIGMAP_SOURCE_PATH",
+			Name:  "INFRAKUBE_TASK_EXEC_CONFIGMAP_SOURCE_PATH",
 			Value: configMapSourcePath,
 		},
 	}...)
@@ -2769,7 +2764,7 @@ func (r TaskOptions) generatePod() (*corev1.Pod, error) {
 	}...)
 	envs = append(envs, []corev1.EnvVar{
 		{
-			Name:  "I3_MAIN_MODULE_ADDONS",
+			Name:  "INFRAKUBE_MAIN_MODULE_ADDONS",
 			Value: mainModulePluginsConfigMapPath,
 		},
 	}...)
@@ -2841,7 +2836,7 @@ func (r TaskOptions) generatePod() (*corev1.Pod, error) {
 	}...)
 	envs = append(envs, []corev1.EnvVar{
 		{
-			Name:  "I3_SSH",
+			Name:  "INFRAKUBE_SSH",
 			Value: sshMountPath,
 		},
 	}...)
@@ -2945,7 +2940,7 @@ func (r TaskOptions) generatePod() (*corev1.Pod, error) {
 	return pod, nil
 }
 
-func (r ReconcileTf) run(ctx context.Context, reqLogger logr.Logger, tf *tfv1beta1.Tf, runOpts TaskOptions, isNewGeneration, isFirstInstall bool) (err error) {
+func (r ReconcileTf) run(ctx context.Context, reqLogger logr.Logger, tf *tfv1beta1.Terraform, runOpts TaskOptions, isNewGeneration, isFirstInstall bool) (err error) {
 
 	if isFirstInstall || isNewGeneration {
 		if err := r.createEnvFromSources(ctx, tf); err != nil {
@@ -2981,7 +2976,7 @@ func (r ReconcileTf) run(ctx context.Context, reqLogger logr.Logger, tf *tfv1bet
 
 		labelsToOmit := []string{}
 		if runOpts.stripGenerationLabelOnOutputsSecret {
-			labelsToOmit = append(labelsToOmit, "tfs.infra3.galleybytes.com/generation")
+			labelsToOmit = append(labelsToOmit, "terraforms.infrakube.galleybytes.com/generation")
 		}
 		if err := r.createSecret(ctx, tf, runOpts.outputsSecretName, runOpts.namespace, map[string][]byte{}, false, labelsToOmit, runOpts); err != nil {
 			return err

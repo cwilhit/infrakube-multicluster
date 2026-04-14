@@ -1,17 +1,17 @@
-apiVersion: infra3.galleybytes.com/v1
-kind: Tf
+apiVersion: infrakube.galleybytes.com/v1
+kind: Terraform
 metadata:
   name: simple-template-example
   namespace: default
 spec:
-  tfVersion: 1.0.0
+  terraformVersion: 1.0.0
   # Pull this module to execute
-  tfModule:
+  terraformModule:
     source: https://github.com/cloudposse/terraform-example-module.git?ref=main
 
   images:
-    tf:
-      image: ghcr.io/galleybytes/infrakube-tftask-v1:1.0.0
+    terraform:
+      image: ghcr.io/galleybytes/infrakube-task:latest
 
   # Use kubernetes as a backend which is available for terraform >= v0.13
   backend: |-
@@ -26,9 +26,15 @@ spec:
 
   setup:
     resourceDownloads:
-    - address: https://github.com/kubernetes/kubernetes.git//build/lib/
+
     - address: https://github.com/cloudposse/terraform-example-module.git//examples/complete/fixtures.us-east-2.tfvars?ref=main
       useAsVar: true
+
+    # # This downloads a big repo as part of the setup, but its just for demonstration
+    # # When Running a debug pod on the system, one can see that lib from the k8s repo 
+    # # are in the main module of the worker. It is commented out becuase it takes a
+    # # a long time to download the repo.
+    # - address: https://github.com/kubernetes/kubernetes.git//build/lib/
 
   # Create a tfvar env for the terraform to use
   taskOptions:
@@ -40,7 +46,7 @@ spec:
     - name: TF_VAR_environment
       value: example
     annotations:
-      hello: infra3
+      hello: infrakube
 
   scmAuthMethods: [] # No keys are required to download or use this tf module
 

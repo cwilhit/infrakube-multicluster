@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 
-	v1 "github.com/galleybytes/infrakube/pkg/apis/infra3/v1"
+	v1 "github.com/galleybytes/infrakube/pkg/apis/infrakube/v1"
 )
 
 var (

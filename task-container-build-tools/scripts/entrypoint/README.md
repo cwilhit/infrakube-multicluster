@@ -1,30 +1,24 @@
 # entrypoint
 
-This binary sets up the infra3 task pod.
+This binary sets up the infrakube task pod. Written in Rust, compiled as a static musl binary.
 
 ## Build
 
-I use `clang++` but it should also work with `g++`.
-
-### Alpine
-
-To build on alpine, run:
+### Using Docker (multi-arch)
 
 ```bash
-apk add clang curl-dev build-base util-linux-dev
-clang++ -static-libgcc -static-libstdc++ -std=c++17 entrypoint.cpp -lcurl -o entrypoint
+./build.sh
 ```
 
-Libraries `libstdc++` and `libgcc` are linked to ensure they don't have to be installed on target systems.
+This produces `bin/entrypoint-amd64` and `bin/entrypoint-arm64`.
 
-### MacOS
+### Local build
 
-
-Run the following:
-
+```bash
+cargo build --release
 ```
-clang++ -std=c++17 -stdlib=libc++ -Wall -pedantic entrypoint.cpp -lcurl -o entrypoint
-```
+
+The binary is at `target/release/entrypoint`.
 
 ## Contribution
 

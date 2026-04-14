@@ -3,8 +3,8 @@ set -o errexit
 
 function fixssh {
   mkdir -p /tmp/.ssh/
-  if stat "$I3_SSH"/* >/dev/null 2>/dev/null; then
-    cp -Lr "$I3_SSH"/* /tmp/.ssh/
+  if stat "$INFRAKUBE_SSH"/* >/dev/null 2>/dev/null; then
+    cp -Lr "$INFRAKUBE_SSH"/* /tmp/.ssh/
     chmod -R 0600 /tmp/.ssh/*
   fi
 }
@@ -46,8 +46,8 @@ if ! version_gt_or_eq "0.15.0" "$terraform_version"; then
   module="."
 fi
 
-cd "$I3_MAIN_MODULE"
-out="$I3_ROOT_PATH"/generations/$I3_GENERATION
+cd "$INFRAKUBE_MAIN_MODULE"
+out="$INFRAKUBE_ROOT_PATH"/generations/$INFRAKUBE_GENERATION
 mkdir -p "$out"
 vardir="$out/tfvars"
 vars=
@@ -55,32 +55,32 @@ if [[ $(ls $vardir | wc -l) -gt 0 ]]; then
   vars="-var-file $(find $vardir -type f | sort -n | join_by ' -var-file ')"
 fi
 
-case "$I3_TASK" in
+case "$INFRAKUBE_TASK" in
     init | init-delete)
-        terraform init $module 2>&1 #| tee "$out"/"$I3_TASK".out
+        terraform init $module 2>&1 #| tee "$out"/"$INFRAKUBE_TASK".out
         ;;
     plan)
-        terraform plan $vars -out tfplan $module 2>&1 #| tee "$out"/"$I3_TASK".out
+        terraform plan $vars -out tfplan $module 2>&1 #| tee "$out"/"$INFRAKUBE_TASK".out
         ;;
     plan-delete)
-        terraform plan $vars -destroy -out tfplan $module 2>&1 #| tee "$out"/"$I3_TASK".out
+        terraform plan $vars -destroy -out tfplan $module 2>&1 #| tee "$out"/"$INFRAKUBE_TASK".out
         ;;
     apply | apply-delete)
-        terraform apply tfplan 2>&1 #| tee "$out"/"$I3_TASK".out
+        terraform apply tfplan 2>&1 #| tee "$out"/"$INFRAKUBE_TASK".out
         ;;
 esac
 status=${PIPESTATUS[0]}
 if [[ $status -gt 0 ]];then exit $status;fi
 
-if [[ "$I3_TASK" == "apply" ]] && [[ "$I3_SAVE_OUTPUTS" == "true" ]]; then
+if [[ "$INFRAKUBE_TASK" == "apply" ]] && [[ "$INFRAKUBE_SAVE_OUTPUTS" == "true" ]]; then
   # On sccessful apply, save outputs as k8s-secret
   data=$(mktemp)
   printf '[
     {"op":"replace","path":"/data","value":{}}
   ]' > "$data"
   t=$(mktemp)
-  include=( $(echo "$I3_OUTPUTS_TO_INCLUDE" | tr "," " ") )
-  omit=( $(echo "$I3_OUTPUTS_TO_OMIT" | tr "," " ") )
+  include=( $(echo "$INFRAKUBE_OUTPUTS_TO_INCLUDE" | tr "," " ") )
+  omit=( $(echo "$INFRAKUBE_OUTPUTS_TO_OMIT" | tr "," " ") )
   jsonoutput=$(terraform output -json)
   keys=( $(jq -r '.|keys[]' <<< $jsonoutput) )
   for key in ${keys[@]}; do
@@ -98,5 +98,5 @@ if [[ "$I3_TASK" == "apply" ]] && [[ "$I3_SAVE_OUTPUTS" == "true" ]]; then
     ]' "$data" > "$t"
     cp "$t" "$data"
   done
-  kubectl patch secret "$I3_OUTPUTS_SECRET_NAME" --type json --patch-file "$data"
+  kubectl patch secret "$INFRAKUBE_OUTPUTS_SECRET_NAME" --type json --patch-file "$data"
 fi

@@ -10,38 +10,34 @@ import (
 )
 
 const (
-	SetupTaskImageRepoDefault  = "ghcr.io/galleybytes/infra3-setup"
-	SetupTaskImageTagDefault   = "1.0.0-dev.5"
-	TfTaskImageRepoDefault     = "ghcr.io/galleybytes/infra3-tftask-v1"
-	TfTaskImageTagDefault      = ""
-	ScriptTaskImageRepoDefault = "ghcr.io/galleybytes/infra3-generic"
-	ScriptTaskImageTagDefault  = "1.0.0-dev.1"
+	TaskImageRepoDefault = "ghcr.io/galleybytes/infrakube-task"
+	TaskImageTagDefault  = "latest"
 )
 
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 // +genclient
-// Tf is the Schema for the tfs API
+// Terraform is the Schema for the terraforms API
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
 // +k8s:openapi-gen=true
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:singular=tf,path=tfs
-type Tf struct {
+// +kubebuilder:resource:singular=terraform,path=terraforms,shortName=tf
+type Terraform struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   TfSpec   `json:"spec,omitempty"`
-	Status TfStatus `json:"status,omitempty"`
+	Spec   TerraformSpec   `json:"spec,omitempty"`
+	Status TerraformStatus `json:"status,omitempty"`
 }
 
-// TfSpec defines the desired state of tf
+// TerraformSpec defines the desired state of Terraform
 // +k8s:openapi-gen=true
-type TfSpec struct {
+type TerraformSpec struct {
 
 	// KeepLatestPodsOnly when true will keep only the pods that match the
-	// current generation of the tf k8s-resource. This overrides the
+	// current generation of the Terraform k8s-resource. This overrides the
 	// behavior of `keepCompletedPods`.
 	KeepLatestPodsOnly bool `json:"keepLatestPodsOnly,omitempty"`
 
@@ -70,7 +66,7 @@ type TfSpec struct {
 	// tf run data. If not defined, a default of "2Gi" is used.
 	PersistentVolumeSize *resource.Quantity `json:"persistentVolumeSize,omitempty"` // NOT MUTABLE
 
-	// StorageClassName is the name of the volume that infra3 will use to store
+	// StorageClassName is the name of the volume that infrakube will use to store
 	// data. An empty value means that this volume does not belong to any StorageClassName and will
 	// use the clusters default StorageClassName
 	StorageClassName *string `json:"storageClassName,omitempty"`
@@ -100,13 +96,13 @@ type TfSpec struct {
 	// Setup is configuration generally used once in the setup task
 	Setup *Setup `json:"setup,omitempty"`
 
-	// TfModule is used to configure the source of the tf module.
-	TfModule Module `json:"tfModule"`
+	// TerraformModule is used to configure the source of the terraform module.
+	TerraformModule Module `json:"terraformModule"`
 
-	// TfVersion is the version of tf which is used to run the module. The tf version is
-	// used as the tag of the tf image  regardless if images.tf.image is defined with a tag. In
-	// that case, the tag is stripped and replace with this value.
-	TfVersion string `json:"tfVersion"`
+	// TerraformVersion is the version of terraform which is used to run the module. The terraform version is
+	// used as the tag of the terraform image regardless if images.terraform.image is defined with a tag. In
+	// that case, the tag is stripped and replaced with this value.
+	TerraformVersion string `json:"terraformVersion"`
 
 	// Backend is used to define a mandatory terraform backend. Value must be a valid terraform backend block.
 	// For more information see https://developer.hashicorp.com/terraform/language/backend
@@ -179,16 +175,16 @@ type TfSpec struct {
 	// However, the implementation of the hold takes place in the tf.sh script.
 	//
 	//
-	// (See https://github.com/GalleyBytes/infra3-tasks/blob/master/tf.sh)
+	// (See https://github.com/GalleyBytes/infrakube-tasks/blob/master/tf.sh)
 	//
 	//
 	// Depending on the script that executes during the workflow, this field may be ignored if not implemented
 	// by the user properly. To approve a workflow using the official galleybytes implementation, a file needs to be placed on the
 	// workflow's persistent-volume:
 	//
-	// - <code>$I3_GENERATION_PATH/\\_approved\\_\\<uuid-of-plan-pod></code> - to approve the workflow
+	// - <code>$INFRAKUBE_GENERATION_PATH/\\_approved\\_\\<uuid-of-plan-pod></code> - to approve the workflow
 	//
-	// - <code>$I3_GENERATION_PATH/\\_canceled\\_\\<uuid-of-plan-pod></code> - to deny and cancel the workflow
+	// - <code>$INFRAKUBE_GENERATION_PATH/\\_canceled\\_\\<uuid-of-plan-pod></code> - to deny and cancel the workflow
 	//
 	// Deleting the plan that is holding will spawn a new plan and a new approval will be required.
 	// +optional
@@ -210,8 +206,8 @@ type Setup struct {
 // Images describes the container images used by task classes
 // +k8s:openapi-gen=true
 type Images struct {
-	// Tf task type container image definition
-	Tf *ImageConfig `json:"tf,omitempty"`
+	// Terraform task type container image definition
+	Terraform *ImageConfig `json:"terraform,omitempty"`
 	// Script task type container image definition
 	Script *ImageConfig `json:"script,omitempty"`
 	// Setup task type container image definition
@@ -251,9 +247,9 @@ type Module struct {
 
 	// ConfigMapSelector is an option that points to an existing configmap on the executing cluster. The
 	// configmap is expected to contains has the tf module (ie keys ending with .tf).
-	// The configmap would need to live in the same namespace as the infra3 resource.
+	// The configmap would need to live in the same namespace as the infrakube resource.
 	//
-	// The configmap is mounted as a volume and put into the I3_MAIN_MODULE path by the setup task.
+	// The configmap is mounted as a volume and put into the INFRAKUBE_MAIN_MODULE path by the setup task.
 	//
 	// If a key is defined, the value is used as the module else the entirety of the data objects will be
 	// loaded as files.
@@ -262,7 +258,7 @@ type Module struct {
 	// Typoed form of configMapSelector
 	ConfigMapSeclector_x *ConfigMapSelector `json:"configMapSeclector,omitempty"`
 
-	// Inline used to define an entire tf module inline and then mounted in the I3_MAIN_MODULE path.
+	// Inline used to define an entire tf module inline and then mounted in the INFRAKUBE_MAIN_MODULE path.
 	Inline string `json:"inline,omitempty"`
 }
 
@@ -366,7 +362,7 @@ type Plugin struct {
 	When string `json:"when"`
 
 	// Task is the second part of a two-part selector of when the plugin gets run in the workflow. This
-	// should correspond to one of the infra3 task names.
+	// should correspond to one of the infrakube task names.
 	Task TaskName `json:"task"`
 
 	// Must is short for "must succeed to generate sidecar spec". Generation of spec does not guarantee
@@ -452,7 +448,7 @@ type StageScript struct {
 	// ConfigMapSelector reads a in a script from a configmap name+key
 	ConfigMapSelector *ConfigMapSelector `json:"configMapSelector,omitempty"`
 
-	// Inline is used to write the entire task execution script in the infra3 resource.
+	// Inline is used to write the entire task execution script in the infrakube resource.
 	Inline string `json:"inline,omitempty"`
 }
 
@@ -499,11 +495,11 @@ type GitHTTPS struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// TfList contains a list of tf
-type TfList struct {
+// TerraformList contains a list of Terraform
+type TerraformList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Tf `json:"items"`
+	Items           []Terraform `json:"items"`
 }
 
 // ResourceDownload (formerly SrcOpts) defines a resource to fetch using one
@@ -594,8 +590,8 @@ type AWSCredentials struct {
 	// is the most secure way to use IRSA.
 	//
 	// However, for a reusable policy consider "StringLike" with a few wildcards to make
-	// the irsa role usable by pods created by infra3. The example below is
-	// pretty liberal, but will work for any pod created by the infra3.
+	// the irsa role usable by pods created by infrakube. The example below is
+	// pretty liberal, but will work for any pod created by infrakube.
 	//
 	// ```json
 	//   {
@@ -640,9 +636,9 @@ type SecretNameRef struct {
 	Key string `json:"key,omitempty"`
 }
 
-// TfStatus defines the observed state of tf
+// TerraformStatus defines the observed state of Terraform
 // +k8s:openapi-gen=true
-type TfStatus struct {
+type TerraformStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
@@ -799,8 +795,8 @@ const (
 // of the boolean value, even if it is false. This is different from the default json package, which omits false
 // values when marshalling. This behavior is useful for sending JSON data over HTTP, where false values need to
 // be explicitly included to avoid being ignored in patches.
-func (s TfSpec) MarshalJSON() ([]byte, error) {
-	type Alias TfSpec
+func (s TerraformSpec) MarshalJSON() ([]byte, error) {
+	type Alias TerraformSpec
 	return json.Marshal(&struct {
 		*Alias
 		KeepLatestPodsOnly   bool         `json:"keepLatestPodsOnly"`
@@ -876,6 +872,6 @@ func (s Plugin) MarshalJSON() ([]byte, error) {
 }
 
 func init() {
-	SchemeBuilder.Register(&Tf{}, &TfList{})
+	SchemeBuilder.Register(&Terraform{}, &TerraformList{})
 
 }

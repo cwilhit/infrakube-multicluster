@@ -22,7 +22,7 @@ import (
 	fmt "fmt"
 	http "net/http"
 
-	infra3v1 "github.com/galleybytes/infrakube/pkg/client/clientset/versioned/typed/infra3/v1"
+	infrakubev1 "github.com/galleybytes/infrakube/pkg/client/clientset/versioned/typed/infrakube/v1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"
@@ -30,18 +30,18 @@ import (
 
 type Interface interface {
 	Discovery() discovery.DiscoveryInterface
-	Infra3V1() infra3v1.Infra3V1Interface
+	InfrakubeV1() infrakubev1.InfrakubeV1Interface
 }
 
 // Clientset contains the clients for groups.
 type Clientset struct {
 	*discovery.DiscoveryClient
-	infra3V1 *infra3v1.Infra3V1Client
+	infrakubeV1 *infrakubev1.InfrakubeV1Client
 }
 
-// Infra3V1 retrieves the Infra3V1Client
-func (c *Clientset) Infra3V1() infra3v1.Infra3V1Interface {
-	return c.infra3V1
+// InfrakubeV1 retrieves the InfrakubeV1Client
+func (c *Clientset) InfrakubeV1() infrakubev1.InfrakubeV1Interface {
+	return c.infrakubeV1
 }
 
 // Discovery retrieves the DiscoveryClient
@@ -88,7 +88,7 @@ func NewForConfigAndClient(c *rest.Config, httpClient *http.Client) (*Clientset,
 
 	var cs Clientset
 	var err error
-	cs.infra3V1, err = infra3v1.NewForConfigAndClient(&configShallowCopy, httpClient)
+	cs.infrakubeV1, err = infrakubev1.NewForConfigAndClient(&configShallowCopy, httpClient)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func NewForConfigOrDie(c *rest.Config) *Clientset {
 // New creates a new Clientset for the given RESTClient.
 func New(c rest.Interface) *Clientset {
 	var cs Clientset
-	cs.infra3V1 = infra3v1.New(c)
+	cs.infrakubeV1 = infrakubev1.New(c)
 
 	cs.DiscoveryClient = discovery.NewDiscoveryClient(c)
 	return &cs

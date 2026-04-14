@@ -34,7 +34,7 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
-func StartInfra3() {
+func StartInfrakube() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
@@ -67,13 +67,13 @@ func StartInfra3() {
 	globalEnvFromSecretData := make(map[string][]byte)
 	for _, env := range os.Environ() {
 		key := strings.Split(env, "=")[0]
-		if strings.HasPrefix(key, "I3_VAR_") {
+		if strings.HasPrefix(key, "INFRAKUBE_VAR_") {
 
-			globalEnvFromConfigmapData[strings.TrimPrefix(key, "I3_VAR_")] = os.Getenv(key)
+			globalEnvFromConfigmapData[strings.TrimPrefix(key, "INFRAKUBE_VAR_")] = os.Getenv(key)
 
 		}
-		if strings.HasPrefix(key, "I3_SECRET_") {
-			globalEnvFromSecretData[strings.TrimPrefix(key, "I3_SECRET_")] = []byte(os.Getenv(key))
+		if strings.HasPrefix(key, "INFRAKUBE_SECRET_") {
+			globalEnvFromSecretData[strings.TrimPrefix(key, "INFRAKUBE_SECRET_")] = []byte(os.Getenv(key))
 		}
 	}
 

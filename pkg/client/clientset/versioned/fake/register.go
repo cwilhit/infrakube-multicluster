@@ -19,7 +19,7 @@ limitations under the License.
 package fake
 
 import (
-	infra3v1 "github.com/galleybytes/infrakube/pkg/apis/infra3/v1"
+	infrakubev1 "github.com/galleybytes/infrakube/pkg/apis/infrakube/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -31,7 +31,7 @@ var scheme = runtime.NewScheme()
 var codecs = serializer.NewCodecFactory(scheme)
 
 var localSchemeBuilder = runtime.SchemeBuilder{
-	infra3v1.AddToScheme,
+	infrakubev1.AddToScheme,
 }
 
 // AddToScheme adds all types of this clientset into the given scheme. This allows composition

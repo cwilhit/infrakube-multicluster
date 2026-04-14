@@ -1,8 +1,8 @@
 PKG ?= github.com/galleybytes/infrakube
 DOCKER_REPO ?= ghcr.io/galleybytes
-IMAGE_NAME ?= infra3
+IMAGE_NAME ?= infrakube
 DEPLOYMENT ?= ${IMAGE_NAME}
-NAMESPACE ?= infra3-system
+NAMESPACE ?= infrakube-system
 VERSION ?= $(shell  git describe --tags --dirty)
 ifeq ($(VERSION),)
 VERSION := v0.0.0
@@ -77,19 +77,19 @@ endif
 # rbac:roleName=manager-role
 # Generate manifests e.g. CRD, RBAC etc.
 crds: controller-gen
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) paths="./..." output:crd:stdout > deploy/crds/infra3.galleybytes.com_tfs_crd.yaml
+	$(CONTROLLER_GEN) $(CRD_OPTIONS) paths="./..." output:crd:stdout > deploy/crds/infrakube.galleybytes.com_terraforms_crd.yaml
 
 generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 openapi-gen: openapi-gen-bin
-	$(OPENAPI_GEN) --logtostderr=true --output-pkg github.com/galleybytes/infrakube/pkg/apis/infra3/v1 --output-dir pkg/apis/infra3/v1 --output-file "zz_generated.openapi.go" --go-header-file ./hack/boilerplate.go.txt  -r "-" github.com/galleybytes/infrakube/pkg/apis/infra3/v1
+	$(OPENAPI_GEN) --logtostderr=true --output-pkg github.com/galleybytes/infrakube/pkg/apis/infrakube/v1 --output-dir pkg/apis/infrakube/v1 --output-file "zz_generated.openapi.go" --go-header-file ./hack/boilerplate.go.txt  -r "-" github.com/galleybytes/infrakube/pkg/apis/infrakube/v1
  	 
 docs:
 	/bin/bash hack/docs.sh ${VERSION}
 
 client-gen: client-gen-bin
-	$(CLIENT_GEN) -n versioned --input-base ""  --input ${PKG}/pkg/apis/infra3/v1 --output-pkg ${PKG}/pkg/client/clientset --output-dir pkg/client/clientset --go-header-file ./hack/boilerplate.go.txt --plural-exceptions Tf:Tfs
+	$(CLIENT_GEN) -n versioned --input-base ""  --input ${PKG}/pkg/apis/infrakube/v1 --output-pkg ${PKG}/pkg/client/clientset --output-dir pkg/client/clientset --go-header-file ./hack/boilerplate.go.txt --plural-exceptions Terraform:Terraforms
 
 k8s-gen: crds generate openapi-gen client-gen
 
@@ -106,7 +106,7 @@ vet:
 	go vet ./...
 
 install: crds
-	kubectl apply -f deploy/crds/infra3.galleybytes.com_tfs_crd.yaml
+	kubectl apply -f deploy/crds/infrakube.galleybytes.com_terraforms_crd.yaml
 
 bundle: crds
 	/bin/bash hack/bundler.sh ${VERSION}

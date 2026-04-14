@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: infra3
+  name: infrakube
 rules:
 - apiGroups:
   - ""
@@ -57,7 +57,7 @@ rules:
 - apiGroups:
   - apps
   resourceNames:
-  - infra3
+  - infrakube
   resources:
   - deployments/finalizers
   verbs:
@@ -78,7 +78,7 @@ rules:
   - get
 
 - apiGroups:
-  - infra3.galleybytes.com
+  - infrakube.galleybytes.com
   resources:
   - '*'
   verbs:
@@ -89,6 +89,6 @@ rules:
   resources:
   - customresourcedefinitions
   resourceNames:
-  - tfs.infra3.galleybytes.com
+  - tfs.infrakube.galleybytes.com
   verbs:
   - '*'

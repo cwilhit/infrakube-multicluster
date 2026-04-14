@@ -77,31 +77,32 @@ def build(containerfile, platform, nocache, build_arg, build_context, **kwargs):
     )
 
 
-def build_task(containerfile, platform, nocache, build_args, build_context, host, org, image, tag):
+def build_task(containerfile, platform, nocache, build_args, build_context, host, org, image, tag, push=True):
     repo = f"{host}/{org}/{image}"
-    if not release_manifest_exists(host, org, image, tag, platform.split(",")):
-        cmd = [
-            "docker",
-            "buildx",
-            "build",
-            "--platform",
-            platform,
-            *build_args,
-            "--tag",
-            f"{repo}:{tag}",
-            "-f",
-            containerfile,
-            "--push",
-            build_context,
-        ]
-        cmd = [item for item in cmd if item and item.strip()]
-        click.echo(f"Running command: {' '.join(cmd)}")
-        subprocess.run(
-            cmd,
-            check=True,
-        )
-    else:
+    if push and release_manifest_exists(host, org, image, tag, platform.split(",")):
         click.echo(f"{repo}:{tag} already exists", err=True)
+        return
+    cmd = [
+        "docker",
+        "buildx",
+        "build",
+        "--platform",
+        platform,
+        *build_args,
+        "--tag",
+        f"{repo}:{tag}",
+        "-f",
+        containerfile,
+    ]
+    if push:
+        cmd.append("--push")
+    cmd.append(build_context)
+    cmd = [item for item in cmd if item and item.strip()]
+    click.echo(f"Running command: {' '.join(cmd)}")
+    subprocess.run(
+        cmd,
+        check=True,
+    )
 
 
 # @click.command()

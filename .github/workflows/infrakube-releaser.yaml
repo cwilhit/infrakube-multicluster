@@ -1,12 +1,12 @@
-name: Build Infra3 Container Image
+name: Build Infrakube Container Image
 
 on:
   push:
     tags:
-    - 'infra3-*'
+    - 'infrakube-*'
 
 jobs:
-  infra3-image-build:
+  infrakube-image-build:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
@@ -15,7 +15,7 @@ jobs:
     - name: Get Release Version
       run: |
         TAG=${GITHUB_REF#refs/tags/}
-        VERSION=${TAG#infra3-}
+        VERSION=${TAG#infrakube-}
         echo "VERSION=$VERSION" >> $GITHUB_ENV
 
     - name: Set up Docker Buildx

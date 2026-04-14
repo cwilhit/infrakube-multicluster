@@ -1,0 +1,8 @@
+FROM rust:alpine AS builder
+RUN apk add --no-cache musl-dev
+WORKDIR /workdir
+COPY . .
+RUN cargo build --release && cp target/release/entrypoint /entrypoint
+
+FROM scratch
+COPY --from=builder /entrypoint /entrypoint

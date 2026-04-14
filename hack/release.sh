@@ -50,13 +50,13 @@ stat "$changelog" >/dev/null
 
 export ghcr="ghcr.io"
 export gh_org=${gh_org:-"galleybytes"}
-export image_name=${image_name:-"infra3"}
+export image_name=${image_name:-"infrakube"}
 repo="$ghcr/$gh_org/$image_name"
 export IMG=$repo:$version
 
 
-tmpdir="$(mktemp -d)/infra3-tasks"
-gh repo clone https://github.com/GalleyBytes/infra3-tasks.git "$tmpdir"
+tmpdir="$(mktemp -d)/infrakube-tasks"
+gh repo clone https://github.com/GalleyBytes/infrakube-tasks.git "$tmpdir"
 cd "$tmpdir/images"
 poetry install --no-root
 
