@@ -89,6 +89,6 @@ rules:
   resources:
   - customresourcedefinitions
   resourceNames:
-  - tfs.infrakube.galleybytes.com
+  - terraforms.infrakube.galleybytes.com
   verbs:
   - '*'

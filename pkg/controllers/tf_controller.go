@@ -2401,7 +2401,7 @@ func (r TaskOptions) generateRole() *rbacv1.Role {
 		{
 			Verbs:         []string{"get"},
 			APIGroups:     []string{"infrakube.galleybytes.com"},
-			Resources:     []string{"tfs"},
+			Resources:     []string{"terraforms"},
 			ResourceNames: []string{r.resourceName},
 		},
 	}

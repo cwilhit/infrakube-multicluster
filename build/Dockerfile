@@ -17,10 +17,10 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=$(echo $TARGETPLATFORM | cut -d '/' -f2) GO1
 
 # Final image
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
-ENV OPERATOR=/usr/local/bin/infra3 \
+ENV OPERATOR=/usr/local/bin/infrakube \
     USER_UID=1001 \
-    USER_NAME=infra3 \
-    HOME=/home/infra3
+    USER_NAME=infrakube \
+    HOME=/home/infrakube
 
 # Install operator binary
 COPY --from=builder /workspace/manager ${OPERATOR}
