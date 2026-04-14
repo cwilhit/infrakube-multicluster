@@ -2613,6 +2613,10 @@ func (r TaskOptions) generatePod() (*corev1.Pod, error) {
 			Value: r.tfVersion,
 		},
 		{
+			Name:  "INFRAKUBE_CACHE_URL",
+			Value: "http://infrakube-controller.infrakube-system.svc:8082",
+		},
+		{
 			Name:  "INFRAKUBE_SAVE_OUTPUTS",
 			Value: strconv.FormatBool(r.saveOutputs),
 		},

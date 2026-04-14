@@ -33,6 +33,10 @@ spec:
         args:
         - --zap-log-level=debug
         - --zap-encoder=console
+        ports:
+        - name: cache
+          containerPort: 8082
+          protocol: TCP
         env:
         - name: WATCH_NAMESPACE # Leave blank to watch all namespaces
         - name: POD_NAME
@@ -54,3 +58,10 @@ spec:
           requests:
             cpu: 25m
             memory: 128M
+        volumeMounts:
+        - name: cache
+          mountPath: /var/cache/infrakube/terraform
+      volumes:
+      - name: cache
+        persistentVolumeClaim:
+          claimName: infrakube-cache

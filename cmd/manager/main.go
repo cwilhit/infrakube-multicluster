@@ -124,6 +124,15 @@ func StartInfrakube() {
 		panic(err)
 	}
 
+	cacheServer := &controllers.CacheServer{
+		CacheDir: "/var/cache/infrakube/terraform",
+		Addr:     ":8082",
+	}
+	if err := mgr.Add(cacheServer); err != nil {
+		setupLog.Error(err, "unable to add cache server")
+		os.Exit(1)
+	}
+
 	if err := mgr.AddHealthzCheck("health", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
