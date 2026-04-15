@@ -33,6 +33,9 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
+    - name: Set up GitHub Actions cache runtime
+      uses: crazy-max/ghaction-github-runtime@v3
+
     - name: Install uv
       uses: astral-sh/setup-uv@v5
 
@@ -44,6 +47,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         TFTASK_TAG: ${{ env.VERSION }}
         TFTASK_PUSH: "true"
+        TFTASK_CACHE_FROM: type=gha,scope=infrakube-task
+        TFTASK_CACHE_TO: type=gha,mode=max,scope=infrakube-task
       run: |
         cd task-container-build-tools
         uv run python build-tftask.py

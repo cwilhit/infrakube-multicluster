@@ -77,7 +77,7 @@ def build(containerfile, platform, nocache, build_arg, build_context, **kwargs):
     )
 
 
-def build_task(containerfile, platform, nocache, build_args, build_context, host, org, image, tag, push=True):
+def build_task(containerfile, platform, nocache, build_args, build_context, host, org, image, tag, push=True, cache_from=None, cache_to=None):
     repo = f"{host}/{org}/{image}"
     if push and release_manifest_exists(host, org, image, tag, platform.split(",")):
         click.echo(f"{repo}:{tag} already exists", err=True)
@@ -94,6 +94,10 @@ def build_task(containerfile, platform, nocache, build_args, build_context, host
         "-f",
         containerfile,
     ]
+    if cache_from:
+        cmd.extend(["--cache-from", cache_from])
+    if cache_to:
+        cmd.extend(["--cache-to", cache_to])
     if push:
         cmd.append("--push")
     cmd.append(build_context)

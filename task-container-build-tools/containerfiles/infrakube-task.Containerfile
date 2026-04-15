@@ -30,8 +30,15 @@ RUN apk add --no-cache wget && \
 FROM docker.io/library/rust:alpine AS entrypoint
 RUN apk add --no-cache musl-dev
 WORKDIR /workdir
-COPY scripts/entrypoint /workdir
-RUN cargo build --release && cp target/release/entrypoint /workdir/entrypoint
+COPY scripts/entrypoint/Cargo.toml scripts/entrypoint/Cargo.lock /workdir/
+RUN mkdir -p /workdir/src && printf 'fn main() {}\n' > /workdir/src/main.rs
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/workdir/target \
+    cargo build --release --locked
+COPY scripts/entrypoint/src /workdir/src
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/workdir/target \
+    cargo build --release --locked && cp target/release/entrypoint /workdir/entrypoint
 
 # ---------------------------------------------------------------------------
 # Final runtime image

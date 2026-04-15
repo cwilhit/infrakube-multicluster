@@ -11,6 +11,8 @@ if __name__ == "__main__":
     image = os.getenv("TFTASK_IMAGE", "infrakube-task")
     tag = os.getenv("TFTASK_TAG", "latest")
     push = os.getenv("TFTASK_PUSH", "true").lower() == "true"
+    cache_from = os.getenv("TFTASK_CACHE_FROM")
+    cache_to = os.getenv("TFTASK_CACHE_TO")
     token = os.getenv("GITHUB_TOKEN") or exit("ERROR: GITHUB_TOKEN is missing!")
 
     if push:
@@ -26,4 +28,6 @@ if __name__ == "__main__":
         image,
         tag,
         push=push,
+        cache_from=cache_from,
+        cache_to=cache_to,
     )
