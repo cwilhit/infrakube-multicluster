@@ -33,6 +33,8 @@ spec:
         args:
         - --zap-log-level=debug
         - --zap-encoder=console
+        - --auto-download=true
+        - --tf-download-base-url=https://releases.hashicorp.com/terraform
         ports:
         - name: cache
           containerPort: 8082

@@ -9,6 +9,8 @@ VERSION := v0.0.0
 endif
 IMG ?= ${DOCKER_REPO}/${IMAGE_NAME}:${VERSION}
 LOCAL_CACHE_URL ?= http://host.docker.internal:8082
+LOCAL_AUTO_DOWNLOAD ?= true
+TF_DOWNLOAD_BASE_URL ?= https://releases.hashicorp.com/terraform/
 OS := $(shell uname -s | tr A-Z a-z)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
@@ -132,7 +134,9 @@ run: fmt vet
 	$(eval CACHE_DIR := $(shell mktemp -d))
 	@echo "Using cache dir: $(CACHE_DIR)"
 	@echo "Using cache URL: $(LOCAL_CACHE_URL)"
-	go run main.go --max-concurrent-reconciles 10 --zap-log-level=5 --cache-dir=$(CACHE_DIR) --cache-url=$(LOCAL_CACHE_URL)
+	@echo "Using auto-download: $(LOCAL_AUTO_DOWNLOAD)"
+	@echo "Using terraform download base URL: $(TF_DOWNLOAD_BASE_URL)"
+	go run main.go --max-concurrent-reconciles 10 --zap-log-level=5 --cache-dir=$(CACHE_DIR) --cache-url=$(LOCAL_CACHE_URL) --auto-download=$(LOCAL_AUTO_DOWNLOAD) --tf-download-base-url=$(TF_DOWNLOAD_BASE_URL)
 
 install-webhook: fmt vet
 	find deploy -maxdepth 1 -type f -name 'webhook-*' -exec kubectl apply -f {} \;
