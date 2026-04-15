@@ -45,6 +45,7 @@ func StartInfrakube() {
 	var inheritTolerations bool
 	var requireApprovalImage string
 	var cacheDir string
+	var cacheURL string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -58,6 +59,7 @@ func StartInfrakube() {
 	flag.BoolVar(&inheritTolerations, "inherit-tolerations", false, "Use the controller's tolerations for every task created by the controller")
 	flag.StringVar(&requireApprovalImage, "require-approval-image", "ghcr.io/galleybytes/require-approval:0.2.0", "Plugin image for require-approval")
 	flag.StringVar(&cacheDir, "cache-dir", "/var/cache/infrakube/terraform", "Directory for the terraform binary cache")
+	flag.StringVar(&cacheURL, "cache-url", "http://infrakube-controller.infrakube-system.svc:8082", "URL of the cache server injected into task pods")
 	opts := zap.Options{
 		Development: true,
 		Level:       zapcore.DebugLevel,
@@ -113,6 +115,7 @@ func StartInfrakube() {
 			InheritTolerations:         inheritTolerations,
 			TolerationsCacheKey:        "inherited_tolerations",
 			RequireApprovalImage:       requireApprovalImage,
+			CacheURL:                   cacheURL,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Cluster")
 			os.Exit(1)
