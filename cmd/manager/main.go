@@ -44,6 +44,7 @@ func StartInfrakube() {
 	var inheritAffinty bool
 	var inheritTolerations bool
 	var requireApprovalImage string
+	var cacheDir string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -56,6 +57,7 @@ func StartInfrakube() {
 	flag.BoolVar(&inheritAffinty, "inherit-affinity", false, "Use the controller's affinity rules for every task created by the controller")
 	flag.BoolVar(&inheritTolerations, "inherit-tolerations", false, "Use the controller's tolerations for every task created by the controller")
 	flag.StringVar(&requireApprovalImage, "require-approval-image", "ghcr.io/galleybytes/require-approval:0.2.0", "Plugin image for require-approval")
+	flag.StringVar(&cacheDir, "cache-dir", "/var/cache/infrakube/terraform", "Directory for the terraform binary cache")
 	opts := zap.Options{
 		Development: true,
 		Level:       zapcore.DebugLevel,
@@ -125,7 +127,7 @@ func StartInfrakube() {
 	}
 
 	cacheServer := &controllers.CacheServer{
-		CacheDir: "/var/cache/infrakube/terraform",
+		CacheDir: cacheDir,
 		Addr:     ":8082",
 	}
 	if err := mgr.Add(cacheServer); err != nil {
