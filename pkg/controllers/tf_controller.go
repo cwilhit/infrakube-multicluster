@@ -570,7 +570,7 @@ const tfFinalizer = "finalizer.infrakube.galleybytes.com"
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileTf) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reconcilerID := string(uuid.NewUUID())
-	reqLogger := r.Log.WithValues("Infra3", request.NamespacedName, "id", reconcilerID)
+	reqLogger := r.Log.WithValues("Infrakube", request.NamespacedName, "id", reconcilerID)
 	err := r.cacheNodeSelectors(ctx, reqLogger)
 	if err != nil {
 		panic(err)

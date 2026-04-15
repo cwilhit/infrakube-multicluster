@@ -24,9 +24,9 @@ ENV OPERATOR=/usr/local/bin/infrakube \
 
 # Install operator binary
 COPY --from=builder /workspace/manager ${OPERATOR}
-COPY build/bin /usr/local/bin
+COPY build/scripts /usr/local/bin
 RUN /usr/local/bin/user_setup
 
-ENTRYPOINT ["/usr/local/bin/entrypoint"]
+ENTRYPOINT ["/usr/local/bin/infrakube-entrypoint"]
 USER ${USER_UID}
 LABEL org.opencontainers.image.source=https://github.com/galleybytes/infrakube

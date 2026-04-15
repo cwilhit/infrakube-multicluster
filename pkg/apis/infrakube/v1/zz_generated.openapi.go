@@ -303,7 +303,7 @@ func schema_pkg_apis_infrakube_v1_Module(ref common.ReferenceCallback) common.Op
 				Properties: map[string]spec.Schema{
 					"source": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Source accepts a subset of the tf \"Module Source\" ways of defining a module. Infra3 prefers modules that are defined in a git repo as opposed to other scm types. Refer to https://www.terraform.io/language/modules/sources#module-sources for more details.",
+							Description: "Source accepts a subset of the tf \"Module Source\" ways of defining a module. Infrakube prefers modules that are defined in a git repo as opposed to other scm types. Refer to https://www.terraform.io/language/modules/sources#module-sources for more details.",
 							Type:        []string{"string"},
 							Format:      "",
 						},

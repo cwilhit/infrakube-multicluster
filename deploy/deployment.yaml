@@ -28,8 +28,6 @@ spec:
       - name: infrakube
         image: "ghcr.io/galleybytes/infrakube:latest"
         imagePullPolicy: Always
-        command:
-        - infrakube
         args:
         - --zap-log-level=debug
         - --zap-encoder=console
