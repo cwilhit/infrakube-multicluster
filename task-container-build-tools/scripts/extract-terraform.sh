@@ -36,7 +36,7 @@ available_versions() {
 if [ "${VERSION}" = "latest" ]; then
     VERSION=$(available_versions | tail -1)
     if [ -z "${VERSION}" ]; then
-        echo "ERROR: No terraform versions bundled in this image." >&2
+        echo "ERROR: terraformVersion must be set explicitly when no versions are bundled in the image." >&2
         exit 1
     fi
     echo "Using latest bundled terraform version: ${VERSION}"
@@ -123,6 +123,9 @@ fi
 
 # All tiers failed
 AVAILABLE=$(available_versions | tr '\n' ' ')
+if [ -z "${AVAILABLE}" ]; then
+    AVAILABLE="none"
+fi
 cat >&2 <<EOF
 ERROR: Terraform version '${VERSION}' is not available.
 
