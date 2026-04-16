@@ -3,12 +3,14 @@ package manager
 import (
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	"github.com/galleybytes/infrakube/pkg/apis"
+	infrakubev1 "github.com/galleybytes/infrakube/pkg/apis/infrakube/v1"
 	"github.com/galleybytes/infrakube/pkg/controllers"
 	localcache "github.com/patrickmn/go-cache"
 	"go.uber.org/zap/zapcore"
@@ -48,6 +50,7 @@ func StartInfrakube() {
 	var cacheURL string
 	var autoDownload bool
 	var tfDownloadBaseURL string
+	var taskImage string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -64,6 +67,11 @@ func StartInfrakube() {
 	flag.StringVar(&cacheURL, "cache-url", "http://infrakube-controller.infrakube-system.svc:8082", "URL of the cache server injected into task pods")
 	flag.BoolVar(&autoDownload, "auto-download", true, "Allow task pods to automatically download terraform binaries from the internet")
 	flag.StringVar(&tfDownloadBaseURL, "tf-download-base-url", "https://releases.hashicorp.com/terraform", "Base URL for terraform release downloads")
+	taskImageDefault := os.Getenv("INFRAKUBE_TASK_IMAGE")
+	if taskImageDefault == "" {
+		taskImageDefault = fmt.Sprintf("%s:%s", infrakubev1.TaskImageRepoDefault, infrakubev1.TaskImageTagDefault)
+	}
+	flag.StringVar(&taskImage, "task-image", taskImageDefault, "Default task image for terraform, setup, and script tasks when spec.images is not set")
 	opts := zap.Options{
 		Development: true,
 		Level:       zapcore.DebugLevel,
@@ -122,6 +130,7 @@ func StartInfrakube() {
 			CacheURL:                   cacheURL,
 			AutoDownload:               autoDownload,
 			TfDownloadBaseURL:          tfDownloadBaseURL,
+			TaskImage:                  taskImage,
 		}).SetupWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create controller", "controller", "Cluster")
 			os.Exit(1)

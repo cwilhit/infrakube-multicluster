@@ -87,6 +87,7 @@ type ReconcileTf struct {
 	CacheURL          string
 	AutoDownload      bool
 	TfDownloadBaseURL string
+	TaskImage         string
 }
 
 // createEnvFromSources adds any of the global environment vars defined at the controller scope
@@ -343,7 +344,7 @@ type TaskOptions struct {
 	sidecarPlugins []corev1.Pod
 }
 
-func newTaskOptions(tf *tfv1beta1.Terraform, task tfv1beta1.TaskName, generation int64, globalEnvFrom []corev1.EnvFromSource, affinity *corev1.Affinity, nodeSelector map[string]string, tolerations []corev1.Toleration, requireApprovalImage string, cacheURL string, autoDownload bool, tfDownloadBaseURL string) TaskOptions {
+func newTaskOptions(tf *tfv1beta1.Terraform, task tfv1beta1.TaskName, generation int64, globalEnvFrom []corev1.EnvFromSource, affinity *corev1.Affinity, nodeSelector map[string]string, tolerations []corev1.Toleration, requireApprovalImage string, cacheURL string, autoDownload bool, tfDownloadBaseURL string, taskImage string) TaskOptions {
 	// TODO Read the tfstate and decide IF_NEW_RESOURCE based on that
 	// applyAction := false
 	resourceName := tf.Name
@@ -415,6 +416,9 @@ func newTaskOptions(tf *tfv1beta1.Terraform, task tfv1beta1.TaskName, generation
 	}
 
 	defaultImage := fmt.Sprintf("%s:%s", tfv1beta1.TaskImageRepoDefault, tfv1beta1.TaskImageTagDefault)
+	if taskImage != "" {
+		defaultImage = taskImage
+	}
 
 	if images.Terraform == nil {
 		images.Terraform = &tfv1beta1.ImageConfig{
@@ -738,7 +742,7 @@ func (r *ReconcileTf) Reconcile(ctx context.Context, request reconcile.Request) 
 	podType := currentStage.TaskType
 	generation := currentStage.Generation
 	affinity, nodeSelector, tolerations := r.getNodeSelectorsFromCache()
-	runOpts := newTaskOptions(tf, currentStage.TaskType, generation, globalEnvFrom, affinity, nodeSelector, tolerations, r.RequireApprovalImage, r.CacheURL, r.AutoDownload, r.TfDownloadBaseURL)
+	runOpts := newTaskOptions(tf, currentStage.TaskType, generation, globalEnvFrom, affinity, nodeSelector, tolerations, r.RequireApprovalImage, r.CacheURL, r.AutoDownload, r.TfDownloadBaseURL, r.TaskImage)
 
 	if podType == tfv1beta1.RunNil {
 		// podType is blank when the tf workflow has completed for
@@ -1531,7 +1535,7 @@ func (r ReconcileTf) getNodeSelectorsFromCache() (*corev1.Affinity, map[string]s
 // Define a set of TaskOptions specific for the plugin task
 func (r ReconcileTf) getPluginRunOpts(tf *tfv1beta1.Terraform, pluginTaskName tfv1beta1.TaskName, pluginConfig tfv1beta1.Plugin, globalEnvFrom []corev1.EnvFromSource) TaskOptions {
 	affinity, nodeSelector, tolerations := r.getNodeSelectorsFromCache()
-	pluginRunOpts := newTaskOptions(tf, pluginTaskName, tf.Generation, globalEnvFrom, affinity, nodeSelector, tolerations, r.RequireApprovalImage, r.CacheURL, r.AutoDownload, r.TfDownloadBaseURL)
+	pluginRunOpts := newTaskOptions(tf, pluginTaskName, tf.Generation, globalEnvFrom, affinity, nodeSelector, tolerations, r.RequireApprovalImage, r.CacheURL, r.AutoDownload, r.TfDownloadBaseURL, r.TaskImage)
 	pluginRunOpts.image = pluginConfig.Image
 	pluginRunOpts.imagePullPolicy = pluginConfig.ImagePullPolicy
 	return pluginRunOpts
