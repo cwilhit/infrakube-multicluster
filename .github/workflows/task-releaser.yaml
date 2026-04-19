@@ -23,7 +23,7 @@ jobs:
           TAG=${GITHUB_REF#refs/tags/}
           VERSION=${TAG#task-}
         else
-          VERSION=latest
+          VERSION="0.0.0-$(date +%Y%m%d%H%M%S)"
         fi
         echo "VERSION=$VERSION" >> $GITHUB_ENV
 
@@ -33,18 +33,22 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
+    - name: Set up GitHub Actions cache runtime
+      uses: crazy-max/ghaction-github-runtime@v3
+
     - name: Install uv
       uses: astral-sh/setup-uv@v5
 
     - name: Log in to registry
-      if: github.event_name == 'push'
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
 
     - name: Build & Push
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         TFTASK_TAG: ${{ env.VERSION }}
-        TFTASK_PUSH: ${{ github.event_name == 'push' && 'true' || 'false' }}
+        TFTASK_PUSH: "true"
+        TFTASK_CACHE_FROM: type=gha,scope=infrakube-task
+        TFTASK_CACHE_TO: type=gha,mode=max,scope=infrakube-task
       run: |
         cd task-container-build-tools
         uv run python build-tftask.py

@@ -238,7 +238,7 @@ type ImageConfig struct {
 // +k8s:openapi-gen=true
 type Module struct {
 	// Source accepts a subset of the tf "Module Source" ways of defining a module.
-	// Infra3 prefers modules that are defined in a git repo as opposed to other scm types.
+	// Infrakube prefers modules that are defined in a git repo as opposed to other scm types.
 	// Refer to https://www.terraform.io/language/modules/sources#module-sources for more details.
 	Source string `json:"source,omitempty"`
 	// Version to select from a tf registry. For version to be used, source must be defined.

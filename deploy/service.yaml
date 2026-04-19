@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: infrakube-controller
+  namespace: infrakube-system
+spec:
+  selector:
+    app: infrakube
+    component: controller
+  ports:
+  - name: cache
+    port: 8082
+    targetPort: 8082
+    protocol: TCP

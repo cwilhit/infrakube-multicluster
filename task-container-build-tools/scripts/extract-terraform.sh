@@ -3,13 +3,31 @@ set -euo pipefail
 
 # extract-terraform.sh
 #
-# Extracts or downloads the requested terraform version for use in the pod.
-# Called by the entrypoint wrapper before the main entrypoint for terraform tasks.
+# Terraform binary resolution tiers:
+# 1. Bundled xz archive in the image
+# 2. Controller cache (HTTP GET)
+# 3. User-provided INFRAKUBE_TF_DOWNLOAD_URL override (always available)
+# 4. Auto-download from INFRAKUBE_TF_DOWNLOAD_URL_BASE (gated by INFRAKUBE_AUTO_DOWNLOAD)
+# 5. Fail with helpful error
 
 VERSION="${INFRAKUBE_TF_VERSION:-latest}"
 VERSIONS_DIR="/opt/terraform/versions"
 BIN_DIR="/opt/terraform/bin"
 TERRAFORM_BIN="${BIN_DIR}/terraform"
+CACHE_URL="${INFRAKUBE_CACHE_URL:-}"
+AUTO_DOWNLOAD="${INFRAKUBE_AUTO_DOWNLOAD:-true}"
+DOWNLOAD_BASE_URL="${INFRAKUBE_TF_DOWNLOAD_URL_BASE:-https://releases.hashicorp.com/terraform}"
+DOWNLOAD_BASE_URL="${DOWNLOAD_BASE_URL%/}"
+
+map_arch() {
+    case "$(uname -m)" in
+        x86_64)  echo "amd64" ;;
+        aarch64) echo "arm64" ;;
+        *)       echo "$(uname -m)" ;;
+    esac
+}
+
+ARCH=$(map_arch)
 
 available_versions() {
     ls "${VERSIONS_DIR}"/*.xz 2>/dev/null | sed 's|.*/||;s|\.xz$||' | sort -V
@@ -18,7 +36,7 @@ available_versions() {
 if [ "${VERSION}" = "latest" ]; then
     VERSION=$(available_versions | tail -1)
     if [ -z "${VERSION}" ]; then
-        echo "ERROR: No terraform versions bundled in this image." >&2
+        echo "ERROR: terraformVersion must be set explicitly when no versions are bundled in the image." >&2
         exit 1
     fi
     echo "Using latest bundled terraform version: ${VERSION}"
@@ -34,7 +52,7 @@ fi
 
 mkdir -p "${BIN_DIR}"
 
-# Try bundled version first
+# Tier 1: Try bundled xz archive
 if [ -f "${VERSIONS_DIR}/${VERSION}.xz" ]; then
     echo "Extracting bundled terraform ${VERSION}..."
     xz -d -k "${VERSIONS_DIR}/${VERSION}.xz" --stdout > "${TERRAFORM_BIN}"
@@ -43,20 +61,41 @@ if [ -f "${VERSIONS_DIR}/${VERSION}.xz" ]; then
     exit 0
 fi
 
-# Try user-provided download URL with checksum verification
-if [ -n "${INFRAKUBE_TF_DOWNLOAD_URL:-}" ] && [ -n "${INFRAKUBE_TF_DOWNLOAD_SHA256:-}" ]; then
-    echo "Downloading terraform from user-provided URL..."
-    TMPFILE=$(mktemp)
-    trap 'rm -f "${TMPFILE}"' EXIT
-    curl -sSL "${INFRAKUBE_TF_DOWNLOAD_URL}" -o "${TMPFILE}"
-    ACTUAL_SHA256=$(sha256sum "${TMPFILE}" | cut -d' ' -f1)
-    if [ "${ACTUAL_SHA256}" != "${INFRAKUBE_TF_DOWNLOAD_SHA256}" ]; then
-        echo "ERROR: SHA256 checksum mismatch!" >&2
-        echo "  Expected: ${INFRAKUBE_TF_DOWNLOAD_SHA256}" >&2
-        echo "  Got:      ${ACTUAL_SHA256}" >&2
-        exit 1
+# Tier 2: Try controller cache
+if [ -n "${CACHE_URL}" ]; then
+    echo "Checking controller cache for terraform ${VERSION} (${ARCH})..."
+    if curl -sSL --fail -o "${TERRAFORM_BIN}" "${CACHE_URL}/api/v1/terraform/${VERSION}?arch=${ARCH}" 2>/dev/null; then
+        chmod +x "${TERRAFORM_BIN}"
+        echo "Terraform ${VERSION} ready (from cache)."
+        exit 0
     fi
-    # Handle both zip files and raw binaries
+    echo "Not in controller cache."
+fi
+
+TMPFILE=$(mktemp)
+trap 'rm -f "${TMPFILE}"' EXIT
+
+cache_binary() {
+    if [ -n "${CACHE_URL}" ]; then
+        echo "Caching terraform ${VERSION} for future runs..."
+        curl -sSL -X PUT --data-binary @"${TERRAFORM_BIN}" \
+            "${CACHE_URL}/api/v1/terraform/${VERSION}?arch=${ARCH}" 2>/dev/null || true
+    fi
+}
+
+# Tier 3: User-provided download URL (always available, takes priority over auto-download)
+if [ -n "${INFRAKUBE_TF_DOWNLOAD_URL:-}" ]; then
+    echo "Downloading terraform from user-provided URL..."
+    curl -sSL --fail "${INFRAKUBE_TF_DOWNLOAD_URL}" -o "${TMPFILE}"
+    if [ -n "${INFRAKUBE_TF_DOWNLOAD_SHA256:-}" ]; then
+        ACTUAL_SHA256=$(sha256sum "${TMPFILE}" | cut -d' ' -f1)
+        if [ "${ACTUAL_SHA256}" != "${INFRAKUBE_TF_DOWNLOAD_SHA256}" ]; then
+            echo "ERROR: SHA256 checksum mismatch!" >&2
+            echo "  Expected: ${INFRAKUBE_TF_DOWNLOAD_SHA256}" >&2
+            echo "  Got:      ${ACTUAL_SHA256}" >&2
+            exit 1
+        fi
+    fi
     if file "${TMPFILE}" | grep -q 'Zip archive'; then
         unzip -o "${TMPFILE}" terraform -d "${BIN_DIR}"
     else
@@ -64,34 +103,43 @@ if [ -n "${INFRAKUBE_TF_DOWNLOAD_URL:-}" ] && [ -n "${INFRAKUBE_TF_DOWNLOAD_SHA2
     fi
     chmod +x "${TERRAFORM_BIN}"
     echo "Terraform ${VERSION} ready (user-provided)."
+    cache_binary
     exit 0
 fi
 
-# Version not available -- print helpful error
-AVAILABLE=$(available_versions | tr '\n' ' ')
-ENCODED_VERSION=$(echo -n "${VERSION}" | sed 's/ /%20/g')
-ISSUE_URL="https://github.com/galleybytes/infrakube/issues/new?title=Add%20terraform%20${ENCODED_VERSION}%20to%20bundled%20versions&body=Please%20add%20terraform%20${ENCODED_VERSION}%20to%20the%20infrakube-task%20image.%0A%0AThis%20version%20is%20available%20at%20https://releases.hashicorp.com/terraform/${ENCODED_VERSION}/"
+# Tier 4: Auto-download from base URL (gated by INFRAKUBE_AUTO_DOWNLOAD)
+if [ "${AUTO_DOWNLOAD}" = "true" ]; then
+    DOWNLOAD_URL="${DOWNLOAD_BASE_URL}/${VERSION}/terraform_${VERSION}_linux_${ARCH}.zip"
+    echo "Auto-downloading terraform ${VERSION} from ${DOWNLOAD_BASE_URL}..."
+    if curl -sSL --fail -o "${TMPFILE}" "${DOWNLOAD_URL}" 2>/dev/null; then
+        unzip -o "${TMPFILE}" terraform -d "${BIN_DIR}"
+        chmod +x "${TERRAFORM_BIN}"
+        echo "Terraform ${VERSION} ready (auto-downloaded)."
+        cache_binary
+        exit 0
+    fi
+    echo "Auto-download failed for terraform ${VERSION}."
+fi
 
+# All tiers failed
+AVAILABLE=$(available_versions | tr '\n' ' ')
+if [ -z "${AVAILABLE}" ]; then
+    AVAILABLE="none"
+fi
 cat >&2 <<EOF
-ERROR: Terraform version '${VERSION}' is not bundled in this image.
+ERROR: Terraform version '${VERSION}' is not available.
+
+Checked: bundled image, controller cache$([ "${AUTO_DOWNLOAD}" = "true" ] && echo ", ${DOWNLOAD_BASE_URL}").
 
 Available bundled versions: ${AVAILABLE}
 
-To unblock yourself, provide the terraform binary via environment variables
-in your Terraform resource's taskOptions:
+To provide a custom binary, set INFRAKUBE_TF_DOWNLOAD_URL in your
+Terraform resource's taskOptions:
 
     taskOptions:
     - for: ["init", "init-delete", "plan", "plan-delete", "apply", "apply-delete"]
       env:
       - name: INFRAKUBE_TF_DOWNLOAD_URL
         value: "https://releases.hashicorp.com/terraform/${VERSION}/terraform_${VERSION}_linux_amd64.zip"
-      - name: INFRAKUBE_TF_DOWNLOAD_SHA256
-        value: "<sha256-of-the-zip-file>"
-
-You can find checksums at:
-  https://releases.hashicorp.com/terraform/${VERSION}/
-
-To request this version be added to the official image, open an issue:
-  ${ISSUE_URL}
 EOF
 exit 1

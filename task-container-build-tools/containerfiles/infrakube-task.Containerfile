@@ -1,33 +1,7 @@
 # infrakube-task.Containerfile
 #
 # Unified task image for infrakube. Combines setup + terraform task capabilities.
-# Contains all supported terraform versions compressed with xz.
-# The correct version is extracted at runtime based on INFRAKUBE_TF_VERSION.
-
-# ---------------------------------------------------------------------------
-# Stage: Download and compress all terraform versions
-# ---------------------------------------------------------------------------
-FROM docker.io/library/alpine:3.18 AS terraform-downloader
-ARG TARGETARCH
-RUN apk add --no-cache curl unzip xz jq
-
-COPY versions.json /tmp/versions.json
-
-RUN mkdir -p /opt/terraform/versions && \
-    for version in $(jq -r '.supported_terraform_versions[]' /tmp/versions.json); do \
-        echo "Downloading terraform ${version} for ${TARGETARCH}..." && \
-        URL="https://releases.hashicorp.com/terraform/${version}/terraform_${version}_linux_${TARGETARCH}.zip" && \
-        if curl -sSL --fail -o /tmp/tf.zip "${URL}"; then \
-            unzip -o /tmp/tf.zip -d /tmp && \
-            xz -9 /tmp/terraform && \
-            mv /tmp/terraform.xz "/opt/terraform/versions/${version}.xz" && \
-            rm /tmp/tf.zip && \
-            echo "  Bundled ${version}"; \
-        else \
-            echo "  SKIP ${version} (not available for ${TARGETARCH})"; \
-        fi; \
-    done && \
-    echo "Bundled versions:" && ls /opt/terraform/versions/
+# Terraform is downloaded on demand at runtime and then cached by the controller.
 
 # ---------------------------------------------------------------------------
 # Stage: Kubernetes CLI
@@ -56,8 +30,15 @@ RUN apk add --no-cache wget && \
 FROM docker.io/library/rust:alpine AS entrypoint
 RUN apk add --no-cache musl-dev
 WORKDIR /workdir
-COPY scripts/entrypoint /workdir
-RUN cargo build --release && cp target/release/entrypoint /workdir/entrypoint
+COPY scripts/entrypoint/Cargo.toml scripts/entrypoint/Cargo.lock /workdir/
+RUN mkdir -p /workdir/src && printf 'fn main() {}\n' > /workdir/src/main.rs
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/workdir/target \
+    cargo build --release --locked
+COPY scripts/entrypoint/src /workdir/src
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/workdir/target \
+    cargo build --release --locked && cp target/release/entrypoint /workdir/entrypoint
 
 # ---------------------------------------------------------------------------
 # Final runtime image
@@ -70,9 +51,6 @@ RUN apk add --no-cache bash jq git openssh curl gettext xz file unzip
 COPY --from=k8s /usr/local/bin/kubectl /usr/local/bin/kubectl
 COPY --from=irsa-tokengen /usr/local/bin/irsa-tokengen /usr/local/bin/irsa-tokengen
 COPY --from=entrypoint /workdir/entrypoint /usr/local/bin/entrypoint-bin
-
-# Copy compressed terraform versions
-COPY --from=terraform-downloader /opt/terraform/versions /opt/terraform/versions
 
 # Copy extraction and wrapper scripts
 COPY scripts/extract-terraform.sh /opt/terraform/extract-terraform.sh

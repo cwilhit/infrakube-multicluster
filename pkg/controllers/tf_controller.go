@@ -83,6 +83,11 @@ type ReconcileTf struct {
 	// Resource in order to ensure the highest compatibility with the other TFO projects (like
 	// infrakube-api and infrakube-dashboard).
 	RequireApprovalImage string
+
+	CacheURL          string
+	AutoDownload      bool
+	TfDownloadBaseURL string
+	TaskImage         string
 }
 
 // createEnvFromSources adds any of the global environment vars defined at the controller scope
@@ -319,6 +324,9 @@ type TaskOptions struct {
 	stripGenerationLabelOnOutputsSecret bool
 	tfModuleParsed                      ParsedAddress
 	tfVersion                           string
+	cacheURL                            string
+	autoDownload                        bool
+	tfDownloadBaseURL                   string
 
 	// urlSource is used to populate an environment variable of the task pod. When not empty is used by the task
 	// as the download location for the script to execute in the task.
@@ -336,7 +344,7 @@ type TaskOptions struct {
 	sidecarPlugins []corev1.Pod
 }
 
-func newTaskOptions(tf *tfv1beta1.Terraform, task tfv1beta1.TaskName, generation int64, globalEnvFrom []corev1.EnvFromSource, affinity *corev1.Affinity, nodeSelector map[string]string, tolerations []corev1.Toleration, requireApprovalImage string) TaskOptions {
+func newTaskOptions(tf *tfv1beta1.Terraform, task tfv1beta1.TaskName, generation int64, globalEnvFrom []corev1.EnvFromSource, affinity *corev1.Affinity, nodeSelector map[string]string, tolerations []corev1.Toleration, requireApprovalImage string, cacheURL string, autoDownload bool, tfDownloadBaseURL string, taskImage string) TaskOptions {
 	// TODO Read the tfstate and decide IF_NEW_RESOURCE based on that
 	// applyAction := false
 	resourceName := tf.Name
@@ -408,6 +416,9 @@ func newTaskOptions(tf *tfv1beta1.Terraform, task tfv1beta1.TaskName, generation
 	}
 
 	defaultImage := fmt.Sprintf("%s:%s", tfv1beta1.TaskImageRepoDefault, tfv1beta1.TaskImageTagDefault)
+	if taskImage != "" {
+		defaultImage = taskImage
+	}
 
 	if images.Terraform == nil {
 		images.Terraform = &tfv1beta1.ImageConfig{
@@ -528,6 +539,9 @@ func newTaskOptions(tf *tfv1beta1.Terraform, task tfv1beta1.TaskName, generation
 		versionedName:                       versionedName,
 		credentials:                         credentials,
 		tfVersion:                           tfVersion,
+		cacheURL:                            cacheURL,
+		autoDownload:                        autoDownload,
+		tfDownloadBaseURL:                   tfDownloadBaseURL,
 		image:                               image,
 		task:                                task,
 		resourceLabels:                      resourceLabels,
@@ -560,7 +574,7 @@ const tfFinalizer = "finalizer.infrakube.galleybytes.com"
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileTf) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reconcilerID := string(uuid.NewUUID())
-	reqLogger := r.Log.WithValues("Infra3", request.NamespacedName, "id", reconcilerID)
+	reqLogger := r.Log.WithValues("Infrakube", request.NamespacedName, "id", reconcilerID)
 	err := r.cacheNodeSelectors(ctx, reqLogger)
 	if err != nil {
 		panic(err)
@@ -728,7 +742,7 @@ func (r *ReconcileTf) Reconcile(ctx context.Context, request reconcile.Request) 
 	podType := currentStage.TaskType
 	generation := currentStage.Generation
 	affinity, nodeSelector, tolerations := r.getNodeSelectorsFromCache()
-	runOpts := newTaskOptions(tf, currentStage.TaskType, generation, globalEnvFrom, affinity, nodeSelector, tolerations, r.RequireApprovalImage)
+	runOpts := newTaskOptions(tf, currentStage.TaskType, generation, globalEnvFrom, affinity, nodeSelector, tolerations, r.RequireApprovalImage, r.CacheURL, r.AutoDownload, r.TfDownloadBaseURL, r.TaskImage)
 
 	if podType == tfv1beta1.RunNil {
 		// podType is blank when the tf workflow has completed for
@@ -1521,7 +1535,7 @@ func (r ReconcileTf) getNodeSelectorsFromCache() (*corev1.Affinity, map[string]s
 // Define a set of TaskOptions specific for the plugin task
 func (r ReconcileTf) getPluginRunOpts(tf *tfv1beta1.Terraform, pluginTaskName tfv1beta1.TaskName, pluginConfig tfv1beta1.Plugin, globalEnvFrom []corev1.EnvFromSource) TaskOptions {
 	affinity, nodeSelector, tolerations := r.getNodeSelectorsFromCache()
-	pluginRunOpts := newTaskOptions(tf, pluginTaskName, tf.Generation, globalEnvFrom, affinity, nodeSelector, tolerations, r.RequireApprovalImage)
+	pluginRunOpts := newTaskOptions(tf, pluginTaskName, tf.Generation, globalEnvFrom, affinity, nodeSelector, tolerations, r.RequireApprovalImage, r.CacheURL, r.AutoDownload, r.TfDownloadBaseURL, r.TaskImage)
 	pluginRunOpts.image = pluginConfig.Image
 	pluginRunOpts.imagePullPolicy = pluginConfig.ImagePullPolicy
 	return pluginRunOpts
@@ -2611,6 +2625,18 @@ func (r TaskOptions) generatePod() (*corev1.Pod, error) {
 		{
 			Name:  "INFRAKUBE_TF_VERSION",
 			Value: r.tfVersion,
+		},
+		{
+			Name:  "INFRAKUBE_CACHE_URL",
+			Value: r.cacheURL,
+		},
+		{
+			Name:  "INFRAKUBE_AUTO_DOWNLOAD",
+			Value: strconv.FormatBool(r.autoDownload),
+		},
+		{
+			Name:  "INFRAKUBE_TF_DOWNLOAD_URL_BASE",
+			Value: r.tfDownloadBaseURL,
 		},
 		{
 			Name:  "INFRAKUBE_SAVE_OUTPUTS",

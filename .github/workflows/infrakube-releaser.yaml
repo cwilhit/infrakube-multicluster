@@ -1,6 +1,9 @@
 name: Build Infrakube Container Image
 
 on:
+  pull_request:
+    branches:
+    - master
   push:
     tags:
     - 'infrakube-*'
@@ -14,8 +17,12 @@ jobs:
 
     - name: Get Release Version
       run: |
-        TAG=${GITHUB_REF#refs/tags/}
-        VERSION=${TAG#infrakube-}
+        if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#infrakube-}
+        else
+          VERSION="0.0.0-$(date +%Y%m%d%H%M%S)"
+        fi
         echo "VERSION=$VERSION" >> $GITHUB_ENV
 
     - name: Set up Docker Buildx
@@ -24,6 +31,15 @@ jobs:
     - name: Log in to registry
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u $ --password-stdin
 
+    - name: Determine tags
+      id: tags
+      run: |
+        if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+          echo "tags=ghcr.io/galleybytes/infrakube:latest,ghcr.io/galleybytes/infrakube:${{ env.VERSION }}" >> $GITHUB_OUTPUT
+        else
+          echo "tags=ghcr.io/galleybytes/infrakube:${{ env.VERSION }}" >> $GITHUB_OUTPUT
+        fi
+
     - name: Build & Push multi-architecture images
       uses: docker/build-push-action@v5
       with:
@@ -31,7 +47,5 @@ jobs:
         file: build/Dockerfile
         push: true
         platforms: linux/amd64,linux/arm64
-        tags: |
-          ghcr.io/galleybytes/infrakube:latest
-          ghcr.io/galleybytes/infrakube:${{ env.VERSION }}
-    
+        tags: ${{ steps.tags.outputs.tags }}
+

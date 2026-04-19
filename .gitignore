@@ -131,3 +131,4 @@ venv
 .venv
 .python-version
 *.lock
+!task-container-build-tools/scripts/entrypoint/Cargo.lock

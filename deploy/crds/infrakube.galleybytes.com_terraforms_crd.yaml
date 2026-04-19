@@ -2778,7 +2778,7 @@ spec:
                   source:
                     description: |-
                       Source accepts a subset of the tf "Module Source" ways of defining a module.
-                      Infra3 prefers modules that are defined in a git repo as opposed to other scm types.
+                      Infrakube prefers modules that are defined in a git repo as opposed to other scm types.
                       Refer to https://www.terraform.io/language/modules/sources#module-sources for more details.
                     type: string
                   version:
