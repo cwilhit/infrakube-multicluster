@@ -7,7 +7,7 @@ on:
   push:
     tags:
     - 'infrakube-*'
-    - 'v-*'
+    - 'v*'
 
 permissions:
   contents: read
@@ -46,8 +46,8 @@ jobs:
             infrakube-*)
               VERSION=${TAG#infrakube-}
               ;;
-            v-*)
-              VERSION=${TAG#v-}
+            v*)
+              VERSION=${TAG#v}
               ;;
             *)
               echo "Unsupported release tag: ${TAG}" >&2

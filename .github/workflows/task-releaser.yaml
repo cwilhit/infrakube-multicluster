@@ -7,7 +7,7 @@ on:
   push:
     tags:
     - 'task-*'
-    - 'v-*'
+    - 'v*'
 
 permissions:
   contents: read
@@ -30,8 +30,8 @@ jobs:
             task-*)
               VERSION=${TAG#task-}
               ;;
-            v-*)
-              VERSION=${TAG#v-}
+            v*)
+              VERSION=${TAG#v}
               ;;
             *)
               echo "Unsupported release tag: ${TAG}" >&2

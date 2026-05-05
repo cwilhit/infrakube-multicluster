@@ -58,7 +58,7 @@ Release image publishing is handled separately by the tag-driven workflows:
 
 - `infrakube-*` tags still publish `latest`, the requested version tag, and an immutable `0.0.0-<commit>` tag for the controller image
 - `task-*` tags still publish the requested version tag and an immutable `0.0.0-<commit>` tag for the task image
-- `v-*` tags now trigger both workflows, and both workflows strip the `v-` prefix before publishing the shared image tag while the controller image also updates `latest`
+- `v*` tags now trigger both workflows, and both workflows strip the leading `v` before publishing the shared image tag while the controller image also updates `latest`
 
 Pushes to `master` do not rerun the validation suite or release builds.
 
