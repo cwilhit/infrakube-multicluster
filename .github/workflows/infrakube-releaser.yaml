@@ -7,6 +7,7 @@ on:
   push:
     tags:
     - 'infrakube-*'
+    - 'v-*'
 
 permissions:
   contents: read
@@ -41,7 +42,18 @@ jobs:
           } >> "$GITHUB_OUTPUT"
         else
           TAG=${GITHUB_REF#refs/tags/}
-          VERSION=${TAG#infrakube-}
+          case "${TAG}" in
+            infrakube-*)
+              VERSION=${TAG#infrakube-}
+              ;;
+            v-*)
+              VERSION=${TAG#v-}
+              ;;
+            *)
+              echo "Unsupported release tag: ${TAG}" >&2
+              exit 1
+              ;;
+          esac
           {
             echo "tags<<EOF"
             echo "ghcr.io/galleybytes/infrakube:${CACHE_TAG}"

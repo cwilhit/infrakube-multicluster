@@ -7,6 +7,7 @@ on:
   push:
     tags:
     - 'task-*'
+    - 'v-*'
 
 permissions:
   contents: read
@@ -25,7 +26,18 @@ jobs:
           echo "TFTASK_TAG=0.0.0-${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
         else
           TAG=${GITHUB_REF#refs/tags/}
-          VERSION=${TAG#task-}
+          case "${TAG}" in
+            task-*)
+              VERSION=${TAG#task-}
+              ;;
+            v-*)
+              VERSION=${TAG#v-}
+              ;;
+            *)
+              echo "Unsupported release tag: ${TAG}" >&2
+              exit 1
+              ;;
+          esac
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
           echo "SHA_TAG=0.0.0-${GITHUB_SHA}" >> "$GITHUB_ENV"
           echo "TFTASK_TAG=${VERSION}" >> "$GITHUB_ENV"
