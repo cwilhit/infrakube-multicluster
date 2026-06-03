@@ -13,6 +13,7 @@ Infrakube is the successor to [terraform-operator](https://github.com/galleybyte
 - AWS IRSA, GCP Workload Identity, and other cloud auth methods
 - Task plugins for custom pre/post workflows
 - Monitor plugins for notifications and observability
+- Optional multicluster runtime support for reconciling Terraform and OpenTofu resources across registered clusters
 
 ## Quick Start
 
@@ -33,6 +34,34 @@ spec:
       }
     }
 ```
+
+## Multicluster Runtime
+
+Infrakube can run one controller in a host cluster while reconciling `Terraform` and `Tofu` resources in multiple workload clusters. Enable this with `--enable-multicluster=true`.
+
+Workload clusters are registered by creating kubeconfig Secrets in the host cluster. By default the controller watches `infrakube-system` for Secrets labeled `infrakube.galleybytes.com/cluster=true`, reads kubeconfig bytes from the `kubeconfig` data key, and uses `infrakube.galleybytes.com/cluster-name` as the optional logical cluster name.
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: workload-east
+  namespace: infrakube-system
+  labels:
+    infrakube.galleybytes.com/cluster: "true"
+    infrakube.galleybytes.com/cluster-name: workload-east
+stringData:
+  kubeconfig: |-
+    apiVersion: v1
+    kind: Config
+    clusters: []
+    contexts: []
+    users: []
+```
+
+Each workload cluster must have the Infrakube CRDs installed and the kubeconfig identity must be allowed to watch and manage the resources Infrakube creates there. The cache server URL injected into task pods must also be reachable from workload clusters, or set `--cache-url` to a reachable endpoint.
+
+For the complete setup guide, see [`docs/multicluster-setup.md`](docs/multicluster-setup.md). For the local kind smoke harness, see [`test/e2e/multicluster/README.md`](test/e2e/multicluster/README.md).
 
 ## Support expectations
 

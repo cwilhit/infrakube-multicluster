@@ -35,6 +35,11 @@ spec:
         - --auto-download=true
         - --tf-download-base-url=https://releases.hashicorp.com/terraform
         - --tofu-download-base-url=https://github.com/opentofu/opentofu/releases/download
+        - --enable-multicluster=false
+        - --cluster-secrets-namespace=infrakube-system
+        - --cluster-secrets-label=infrakube.galleybytes.com/cluster
+        - --cluster-secrets-key=kubeconfig
+        - --cluster-name-label=infrakube.galleybytes.com/cluster-name
         ports:
         - name: cache
           containerPort: 8082
