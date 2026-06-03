@@ -32,11 +32,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/client-go/tools/record"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	runtimecontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	mcbuilder "sigs.k8s.io/multicluster-runtime/pkg/builder"
+	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
+	mcreconcile "sigs.k8s.io/multicluster-runtime/pkg/reconcile"
 )
 
 //go:embed scripts/tf.sh
@@ -53,6 +55,9 @@ type ReconcileTf struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	Client                  client.Client
+	LocalClient             client.Client
+	ClientForCluster        func(context.Context, string) (client.Client, error)
+	RecorderForCluster      func(context.Context, string) (record.EventRecorder, error)
 	Scheme                  *runtime.Scheme
 	Recorder                record.EventRecorder
 	Log                     logr.Logger
@@ -186,14 +191,22 @@ func (r ReconcileTf) listEnvFromSources(tf *tfv1beta1.Terraform) []corev1.EnvFro
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *ReconcileTf) SetupWithManager(mgr ctrl.Manager) error {
-	controllerOptions := runtimecontroller.Options{
+func (r *ReconcileTf) SetupWithManager(mgr mcmanager.Manager) error {
+	controllerOptions := runtimecontroller.TypedOptions[mcreconcile.Request]{
 		MaxConcurrentReconciles: r.MaxConcurrentReconciles,
 	}
 
-	err := ctrl.NewControllerManagedBy(mgr).
-		For(&tfv1beta1.Terraform{}).
-		Owns(&corev1.Pod{}).
+	err := mcbuilder.ControllerManagedBy(mgr).
+		For(
+			&tfv1beta1.Terraform{},
+			mcbuilder.WithEngageWithLocalCluster(true),
+			mcbuilder.WithEngageWithProviderClusters(true),
+		).
+		Owns(
+			&corev1.Pod{},
+			mcbuilder.WithEngageWithLocalCluster(true),
+			mcbuilder.WithEngageWithProviderClusters(true),
+		).
 		WithOptions(controllerOptions).
 		Complete(r)
 	if err != nil {
@@ -582,14 +595,51 @@ const tfFinalizer = "finalizer.infrakube.galleybytes.com"
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileTf) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileTf) Reconcile(ctx context.Context, request mcreconcile.Request) (reconcile.Result, error) {
+	clusterClient, err := r.clientForCluster(ctx, request.ClusterName)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	clusterReconciler := *r
+	clusterReconciler.Client = clusterClient
+	clusterRecorder, err := r.recorderForCluster(ctx, request.ClusterName)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	clusterReconciler.Recorder = clusterRecorder
+	return clusterReconciler.reconcile(ctx, request.Request, request.String(), request.ClusterName)
+}
+
+func (r ReconcileTf) clientForCluster(ctx context.Context, clusterName string) (client.Client, error) {
+	if r.ClientForCluster != nil {
+		return r.ClientForCluster(ctx, clusterName)
+	}
+	return r.Client, nil
+}
+
+func (r ReconcileTf) recorderForCluster(ctx context.Context, clusterName string) (record.EventRecorder, error) {
+	if r.RecorderForCluster != nil {
+		return r.RecorderForCluster(ctx, clusterName)
+	}
+	return r.Recorder, nil
+}
+
+func (r ReconcileTf) controlPlaneClient() client.Client {
+	if r.LocalClient != nil {
+		return r.LocalClient
+	}
+	return r.Client
+}
+
+func (r *ReconcileTf) reconcile(ctx context.Context, request reconcile.Request, lockKeyBase, clusterName string) (reconcile.Result, error) {
 	reconcilerID := string(uuid.NewUUID())
-	reqLogger := r.Log.WithValues("Infrakube", request.NamespacedName, "id", reconcilerID)
+	reqLogger := r.Log.WithValues("Infrakube", request.NamespacedName, "cluster", clusterName, "id", reconcilerID)
 	err := r.cacheNodeSelectors(ctx, reqLogger)
 	if err != nil {
 		panic(err)
 	}
-	lockKey := request.String() + "-reconcile-lock"
+	lockKey := lockKeyBase + "-reconcile-lock"
 	lockOwner, lockFound := r.Cache.Get(lockKey)
 	if lockFound {
 		reqLogger.Info(fmt.Sprintf("Request is locked by '%s'", lockOwner.(string)))
@@ -3144,7 +3194,8 @@ func (r ReconcileTf) cacheNodeSelectors(ctx context.Context, logger logr.Logger)
 	}
 	podNamespacedName := types.NamespacedName{Namespace: podNamespace, Name: podName}
 	pod := corev1.Pod{}
-	err := r.Client.Get(ctx, podNamespacedName, &pod)
+	controlPlaneClient := r.controlPlaneClient()
+	err := controlPlaneClient.Get(ctx, podNamespacedName, &pod)
 	if err != nil {
 		logger.Info(fmt.Sprintf("Could not get pod '%s'", podNamespacedName.String()))
 		return nil
@@ -3161,7 +3212,7 @@ func (r ReconcileTf) cacheNodeSelectors(ctx context.Context, logger logr.Logger)
 	replicaSetName := pod.ObjectMeta.OwnerReferences[0].Name
 	replicaSetNamespacedName := types.NamespacedName{Namespace: podNamespace, Name: replicaSetName}
 	replicaSet := appsv1.ReplicaSet{}
-	err = r.Client.Get(ctx, replicaSetNamespacedName, &replicaSet)
+	err = controlPlaneClient.Get(ctx, replicaSetNamespacedName, &replicaSet)
 	if err != nil {
 		logger.Info(fmt.Sprintf("Could not get replicaset '%s'", replicaSetNamespacedName.String()))
 		return nil
@@ -3178,7 +3229,7 @@ func (r ReconcileTf) cacheNodeSelectors(ctx context.Context, logger logr.Logger)
 	deploymentName := replicaSet.ObjectMeta.OwnerReferences[0].Name
 	deploymentNamespacedName := types.NamespacedName{Namespace: podNamespace, Name: deploymentName}
 	deployment := appsv1.Deployment{}
-	err = r.Client.Get(ctx, deploymentNamespacedName, &deployment)
+	err = controlPlaneClient.Get(ctx, deploymentNamespacedName, &deployment)
 	if err != nil {
 		logger.Info(fmt.Sprintf("Could not get deployment '%s'", deploymentNamespacedName.String()))
 		return nil

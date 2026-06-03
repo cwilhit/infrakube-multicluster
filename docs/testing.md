@@ -9,6 +9,7 @@ This guide explains what the automated test suite covers and how to run it local
 | Unit | `make test-unit` | Cover high-risk behavior such as custom JSON marshaling, task option merging, image/default precedence, pod env generation, and guardrails around invalid task pod configuration. |
 | Controller integration | `make test-integration` | Run the reconcilers against envtest and assert that Terraform and Tofu resources create the expected PVCs, secrets, configmaps, RBAC, service accounts, and pods. |
 | Kind smoke | `make test-e2e` | Run the controller and task image on a real Kubernetes cluster and verify a Terraform workflow and a Tofu workflow both finish successfully. |
+| Kind multicluster smoke | `make test-e2e-multicluster` | Run one host kind cluster and two workload kind clusters, register workload kubeconfigs, and verify remote Terraform and Tofu workflows through MCR. |
 
 The default suite avoids paid infrastructure and long-lived secrets. It focuses on controller behavior and a small number of real workflow executions instead of trying to cover every provider combination.
 
@@ -18,6 +19,7 @@ The default suite avoids paid infrastructure and long-lived secrets. It focuses 
 - Docker
 - A Kubernetes cluster for `make test-e2e`, typically kind
 - `kubectl` configured to point at the cluster you want to use for the smoke test
+- `kind` for `make test-e2e-multicluster`
 
 `make test-unit` and `make test-integration` do not require a live cluster. The integration target downloads envtest assets into `./testbin`.
 
@@ -28,11 +30,13 @@ make test-unit
 make test-integration
 make test
 make test-e2e
+make test-e2e-multicluster
 ```
 
 `make test` is the main validation entrypoint and runs both the unit and envtest integration suites.
 
 If you are changing controller logic, `make test` is the minimum useful check. If you are changing deploy behavior, task images, or workflow execution, run `make test-e2e` against a kind cluster as well.
+If you are changing multicluster discovery, MCR controller setup, remote-client behavior, or cluster registration, run `make test-e2e-multicluster`.
 
 ## End-to-end smoke fixtures
 
@@ -43,6 +47,21 @@ Those fixtures use:
 - inline modules, so the tests do not depend on an external example repository
 - the Kubernetes backend, so state handling is exercised inside the cluster
 - status outputs, so success is easy to assert from CI
+
+## Multicluster smoke fixtures
+
+The multicluster harness lives in `test/e2e/multicluster`:
+
+- `setup.sh` creates one host kind cluster, two workload kind clusters, installs static Infrakube CRDs on all clusters, and registers workload kubeconfig Secrets on the host.
+- `test-multicluster.sh` deploys the controller on the host with `--enable-multicluster=true`, applies the Terraform fixture to one workload cluster, applies the Tofu fixture to another workload cluster, and waits for remote status outputs.
+- `cleanup.sh` deletes the kind clusters.
+
+The multicluster smoke is optional and not part of the default CI path because it creates multiple clusters and is slower than the single-cluster smoke.
+
+```bash
+make test-e2e-multicluster
+test/e2e/multicluster/cleanup.sh
+```
 
 ## CI behavior
 

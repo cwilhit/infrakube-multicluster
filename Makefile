@@ -39,6 +39,7 @@ help:
 	@printf "  %-18s %s\n" "test-unit" "Run unit tests"
 	@printf "  %-18s %s\n" "test-integration" "Run envtest integration tests"
 	@printf "  %-18s %s\n" "test-e2e" "Run kind smoke tests against the current kube context"
+	@printf "  %-18s %s\n" "test-e2e-multicluster" "Run kind multicluster smoke tests"
 	@printf "  %-18s %s\n" "test" "Run unit and integration tests"
 	@printf "  %-18s %s\n" "crds" "Generate CRD manifests"
 	@printf "  %-18s %s\n" "generate" "Generate deepcopy code"
@@ -173,6 +174,10 @@ test-integration: openapi-gen fmt vet crds setup-envtest
 test-e2e:
 	/bin/bash test/e2e/kind-smoke.sh
 
+test-e2e-multicluster:
+	/bin/bash test/e2e/multicluster/setup.sh
+	/bin/bash test/e2e/multicluster/test-multicluster.sh
+
 test: test-unit test-integration
 
 build: k8s-gen openapi-gen 
@@ -201,4 +206,4 @@ install-webhook: fmt vet
 
 
 
-.PHONY: build push run install fmt vet deploy openapi-gen k8s-gen crds contoller-gen client-gen task-image-build setup-envtest test-unit test-integration test-e2e test
+.PHONY: build push run install fmt vet deploy openapi-gen k8s-gen crds contoller-gen client-gen task-image-build setup-envtest test-unit test-integration test-e2e test-e2e-multicluster test
