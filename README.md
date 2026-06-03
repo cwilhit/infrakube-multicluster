@@ -1,4 +1,15 @@
-# Infrakube
+# Infrakube Multicluster Edition
+
+> [!IMPORTANT]
+> **This is an unofficial, privately maintained fork of [galleybytes/infrakube](https://github.com/galleybytes/infrakube).**
+>
+> It adds experimental multicluster mode so a single Infrakube control plane can reconcile `Terraform` and `Tofu` resources across multiple registered workload clusters via [`sigs.k8s.io/multicluster-runtime`](https://github.com/kubernetes-sigs/multicluster-runtime).
+>
+> This fork is **not affiliated with or endorsed by the upstream Infrakube maintainers**. There are **no support, stability, or compatibility guarantees**. APIs and behavior may change without notice, and breaking rebases on upstream are expected. Use at your own risk; for production use cases, prefer the upstream project.
+>
+> Issues and PRs specific to the multicluster work belong here. Upstream Infrakube issues should be filed at [galleybytes/infrakube](https://github.com/galleybytes/infrakube/issues).
+
+See [docs/multicluster-setup.md](docs/multicluster-setup.md) and [test/e2e/multicluster/README.md](test/e2e/multicluster/README.md) for how to try the multicluster mode.
 
 A Kubernetes controller for running Terraform and other Infrastructure as Code workflows.
 
